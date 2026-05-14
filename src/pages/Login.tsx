@@ -32,7 +32,6 @@ export default function Login() {
       <div className="login-card">
         <div className="login-header">
           <h1>🏐 SportsManager</h1>
-          <p>Inicia sesión para continuar</p>
         </div>
         <form onSubmit={handleSubmit} className="login-form">
           {error && <div className="login-error">{error}</div>}
