@@ -591,7 +591,7 @@ export default function Teams() {
             )}
           </div>
         )}
-        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onFileSelected} />
+        <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif" style={{ display: 'none' }} onChange={onFileSelected} />
       </Modal>
 
       {/* Create/Edit Player Modal */}

@@ -77,8 +77,16 @@ export const api = {
   updateJugador: (id: number, data: any) => put(`${BASE_URL}/jugadores/${id}`, data),
   async deleteJugador(id: number) { await del(`${BASE_URL}/jugadores/${id}`); },
   async uploadFotoJugador(jugadorId: number, file: File) {
+    // Comprimir y convertir imagen antes de subir
+    const { compressImage } = await import('@/utils/imageUtils');
+    let processedFile = file;
+    try {
+      processedFile = await compressImage(file, 800, 0.8);
+    } catch (err) {
+      console.warn('No se pudo comprimir la imagen, subiendo original:', err);
+    }
     const formData = new FormData();
-    formData.append('foto', file);
+    formData.append('foto', processedFile);
     const token = localStorage.getItem('voleibol_token');
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;

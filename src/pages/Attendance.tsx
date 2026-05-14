@@ -41,6 +41,7 @@ export default function Attendance() {
   const [loading, setLoading] = useState(true);
   const [selectedPartido, setSelectedPartido] = useState<PartidoCapitan | null>(null);
   const [partidosConAsistencia, setPartidosConAsistencia] = useState<Set<number>>(new Set());
+  const [jornadasMap, setJornadasMap] = useState<Record<number, { numero: number; fecha: string }>>({});
 
   // Asistencias registradas
   const [asistencias, setAsistencias] = useState<AsistenciaRegistro[]>([]);
@@ -52,7 +53,11 @@ export default function Attendance() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scanProcessedRef = useRef(false);
   const [capitanId, setCapitanId] = useState<number | null>(null);
+
+  // Preview jugador escaneado
+  const [previewJugador, setPreviewJugador] = useState<any | null>(null);
 
   // Buscar el jugador asociado al usuario logueado
   useEffect(() => {
@@ -85,13 +90,27 @@ export default function Attendance() {
       setPartidos(list);
       // Verificar cuáles ya tienen asistencia
       const conAsistencia = new Set<number>();
-      await Promise.all(list.map(async (p: PartidoCapitan) => {
-        try {
-          const asist = await api.getAsistenciasPartido(p.id);
-          if (Array.isArray(asist) && asist.length > 0) conAsistencia.add(p.id);
-        } catch { /* ignore */ }
-      }));
+      // Cargar jornadas para obtener fechas
+      const torneoIds = [...new Set(list.map((p: PartidoCapitan) => p.torneo_id))];
+      const jMap: Record<number, { numero: number; fecha: string }> = {};
+      await Promise.all([
+        ...list.map(async (p: PartidoCapitan) => {
+          try {
+            const asist = await api.getAsistenciasPartido(p.id);
+            if (Array.isArray(asist) && asist.length > 0) conAsistencia.add(p.id);
+          } catch { /* ignore */ }
+        }),
+        ...torneoIds.map(async (torneoId: number) => {
+          try {
+            const jornadas = await api.getJornadas(torneoId);
+            if (Array.isArray(jornadas)) {
+              jornadas.forEach((j: any) => { jMap[j.id] = { numero: j.numero, fecha: j.fecha }; });
+            }
+          } catch { /* ignore */ }
+        }),
+      ]);
       setPartidosConAsistencia(conAsistencia);
+      setJornadasMap(jMap);
     } catch (err) {
       console.error(err);
       setPartidos([]);
@@ -139,13 +158,30 @@ export default function Attendance() {
 
   // Agregar jugador por codigo_qr
   const addPlayerByCode = async (code: string) => {
-    if (!code.trim()) return;
-    // Buscar jugador por codigo_qr en todos los equipos del partido
-    // El código QR es único, buscamos en el backend
+    const cleanCode = code.trim();
+
+    if (!cleanCode) return;
+
     try {
-      // Intentamos buscar el jugador por su código QR
-      // Como no hay endpoint específico, buscamos en los jugadores del equipo contrario
       if (!selectedPartido) return;
+
+      const jugadorYaEscaneado = jugadoresContrario.find(
+        (j: any) => j.codigo_qr === cleanCode && jugadoresIds.includes(j.id)
+      );
+
+      if (jugadorYaEscaneado) {
+        setToast({ message: 'Jugador ya registrado', type: 'error' });
+        return;
+      }
+
+      const jugadorConAsistencia = jugadoresContrario.find(
+        (j: any) => j.codigo_qr === cleanCode && asistencias.some(a => a.jugador_id === j.id)
+      );
+
+      if (jugadorConAsistencia) {
+        setToast({ message: 'Jugador ya registrado', type: 'error' });
+        return;
+      }
 
       // Buscar en ambos equipos
       const equipoLocalJugadores = await api.getJugadores(selectedPartido.equipo_local_id);
@@ -155,24 +191,28 @@ export default function Attendance() {
         ...(Array.isArray(equipoVisitanteJugadores) ? equipoVisitanteJugadores : []),
       ];
 
-      const jugador = todosJugadores.find((j: any) => j.codigo_qr === code.trim());
+      const jugador = todosJugadores.find((j: any) => j.codigo_qr === cleanCode);
+
       if (!jugador) {
-        setToast({ message: 'Código QR no encontrado', type: 'error' });
+        setToast({ message: 'Código QR incorrecto', type: 'error' });
         return;
       }
 
       if (jugadoresIds.includes(jugador.id)) {
-        setToast({ message: `${jugador.nombre} ya fue registrado`, type: 'error' });
+        setToast({ message: 'Jugador ya registrado', type: 'error' });
         return;
       }
 
       if (asistencias.some(a => a.jugador_id === jugador.id)) {
-        setToast({ message: `${jugador.nombre} ya tiene asistencia registrada`, type: 'error' });
+        setToast({ message: 'Jugador ya registrado', type: 'error' });
         return;
       }
 
-      setJugadoresIds(prev => [...prev, jugador.id]);
-      setToast({ message: `✓ ${jugador.nombre} (#${jugador.numero})`, type: 'success' });
+      setPreviewJugador(jugador);
+      // Pausar el scanner mientras se muestra el preview
+      if (scannerRef.current) {
+        try { await scannerRef.current.pause(); } catch { /* ignore */ }
+      }
     } catch (err) {
       console.error(err);
       setToast({ message: 'Error al buscar jugador', type: 'error' });
@@ -185,18 +225,43 @@ export default function Attendance() {
     setManualCode('');
   };
 
+  const confirmPreviewJugador = async () => {
+    if (!previewJugador) return;
+    setJugadoresIds(prev => [...prev, previewJugador.id]);
+    setToast({ message: `✓ ${previewJugador.nombre} (#${previewJugador.numero})`, type: 'success' });
+    setPreviewJugador(null);
+    // Reanudar scanner si estaba abierto
+    if (scannerRef.current && scannerOpen) {
+      try { await scannerRef.current.resume(); } catch { /* ignore */ }
+    }
+  };
+
+  const cancelPreviewJugador = async () => {
+    setPreviewJugador(null);
+    if (scannerRef.current && scannerOpen) {
+      try { await scannerRef.current.resume(); } catch { /* ignore */ }
+    }
+  };
+
   // Scanner QR
   const startScanner = async () => {
+    scanProcessedRef.current = false;
     setScannerOpen(true);
+
     setTimeout(async () => {
       try {
         const scanner = new Html5Qrcode('qr-reader');
         scannerRef.current = scanner;
+
         await scanner.start(
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText) => {
-            addPlayerByCode(decodedText);
+          async (decodedText) => {
+            if (scanProcessedRef.current) return;
+
+            scanProcessedRef.current = true;
+            await stopScanner();
+            await addPlayerByCode(decodedText);
           },
           () => {}
         );
@@ -211,8 +276,10 @@ export default function Attendance() {
   const stopScanner = async () => {
     if (scannerRef.current) {
       try { await scannerRef.current.stop(); } catch { /* ignore */ }
+      try { await scannerRef.current.clear(); } catch { /* ignore */ }
       scannerRef.current = null;
     }
+
     setScannerOpen(false);
   };
 
@@ -278,8 +345,9 @@ export default function Attendance() {
                 <h3 className="card-title">{getTeamName(p.equipo_local_id)} vs {getTeamName(p.equipo_visitante_id)}</h3>
                 <div className="card-details">
                   <p><strong>Torneo:</strong> {getTorneoName(p.torneo_id)}</p>
+                  <p><strong>Jornada:</strong> {jornadasMap[p.jornada_id]?.numero ? `Jornada ${jornadasMap[p.jornada_id].numero}` : '—'}</p>
+                  <p><strong>Fecha:</strong> {jornadasMap[p.jornada_id]?.fecha ? new Date(jornadasMap[p.jornada_id].fecha).toLocaleDateString() : '—'}</p>
                   <p><strong>Tipo:</strong> {p.tipo || '—'}</p>
-                  <p><strong>Estatus:</strong> {p.estatus || '—'}</p>
                   {partidosConAsistencia.has(p.id) && (
                     <p style={{ color: 'var(--success)', fontWeight: 600 }}>✓ Asistencia registrada</p>
                   )}
@@ -394,6 +462,27 @@ export default function Attendance() {
           )}
         </div>
       )}
+
+      {/* Preview Jugador Modal */}
+      <Modal open={!!previewJugador} onClose={cancelPreviewJugador} title="Jugador encontrado">
+        {previewJugador && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
+            <img
+              src={getFileUrl(previewJugador.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(previewJugador.nombre) + '&background=6366f1&color=fff&size=128'}
+              alt={previewJugador.nombre}
+              style={{ width: 120, height: 120, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--accent)' }}
+            />
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: '1.2rem', fontWeight: 700 }}>{previewJugador.nombre}</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>#{previewJugador.numero} · {previewJugador.posicion}</p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <button className="btn btn-secondary" onClick={cancelPreviewJugador}>Cancelar</button>
+              <button className="btn btn-primary" onClick={confirmPreviewJugador}>Aceptar</button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Scanner Modal */}
       <Modal open={scannerOpen} onClose={stopScanner} title="Escanear QR">
