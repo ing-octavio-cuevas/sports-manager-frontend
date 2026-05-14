@@ -128,10 +128,11 @@ export default function Layout() {
           ))}
         </nav>
 
-        <div style={{ padding: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: 'auto' }}>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '0.75rem' }}>
           <button className="nav-link" onClick={handleLogout} style={{ width: '100%', border: 'none', background: 'none', cursor: 'pointer' }}>
             <LogOut size={20} /> <span>Cerrar sesión</span>
           </button>
+          <p style={{ textAlign: 'center', fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', marginTop: '0.5rem' }}>v1.0</p>
         </div>
       </aside>
 

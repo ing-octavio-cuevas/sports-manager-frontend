@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0';
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -47,6 +49,7 @@ export default function Login() {
           </button>
         </form>
       </div>
+      <p style={{ position: 'fixed', bottom: '1rem', left: 0, right: 0, textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>v{APP_VERSION}</p>
     </div>
   );
 }
