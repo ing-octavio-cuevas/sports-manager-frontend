@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SportsManager DNS - Route53 + Records
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: tornealo-sports-api.com
+    Description: Dominio registrado en Route53
+
+  EC2PublicIP:
+    Type: String
+    Default: 32.196.49.135
+    Description: IP pública de la EC2 del backend
+
+  CloudFrontDistributionDomain:
+    Type: String
+    Description: Dominio de la distribución CloudFront (ej. d1234abcdef.cloudfront.net)
+
+Resources:
+  # Hosted Zone (se crea automáticamente al registrar dominio en Route53, pero la dejamos por si acaso)
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig:
+        Comment: !Sub 'Hosted zone for ${DomainName}'
+
+  # api.tornealo-sports-api.com → EC2
+  ApiRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub 'api.${DomainName}'
+      Type: A
+      TTL: '300'
+      ResourceRecords:
+        - !Ref EC2PublicIP
+
+  # www.tornealo-sports-api.com → CloudFront
+  WwwRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub 'www.${DomainName}'
+      Type: CNAME
+      TTL: '300'
+      ResourceRecords:
+        - !Ref CloudFrontDistributionDomain
+
+  # tornealo-sports-api.com (root) → CloudFront
+  RootRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !Ref CloudFrontDistributionDomain
+        HostedZoneId: Z2FDTNDATAQYW2  # CloudFront hosted zone ID (siempre es este)
+
+Outputs:
+  HostedZoneId:
+    Description: ID de la Hosted Zone
+    Value: !Ref HostedZone
+
+  ApiDomain:
+    Description: Dominio de la API
+    Value: !Sub 'api.${DomainName}'
+
+  FrontendDomain:
+    Description: Dominio del frontend
+    Value: !Ref DomainName
+
+  NameServers:
+    Description: Name servers (asignar al dominio si no se creó automáticamente)
+    Value: !Join [', ', !GetAtt HostedZone.NameServers]
