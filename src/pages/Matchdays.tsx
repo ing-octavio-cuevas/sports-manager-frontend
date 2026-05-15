@@ -20,6 +20,7 @@ interface PartidoForm {
   puntos_local: number;
   puntos_visitante: number;
   ubicacion_id: number;
+  fecha_hora: string;
   estatus: string;
   tipo: string;
   observaciones: string;
@@ -29,7 +30,7 @@ const emptyJornadaForm: JornadaForm = { numero: 1, fecha: '', estatus: false };
 const emptyPartidoForm: PartidoForm = {
   equipo_local_id: 0, equipo_visitante_id: 0,
   puntos_local: 0, puntos_visitante: 0,
-  ubicacion_id: 0, estatus: 'Por jugar', tipo: 'Oficial', observaciones: '',
+  ubicacion_id: 0, fecha_hora: '', estatus: 'Por jugar', tipo: 'Oficial', observaciones: '',
 };
 
 export default function Matchdays() {
@@ -68,7 +69,7 @@ export default function Matchdays() {
   const [localSets, setLocalSets] = useState<{ id: number; marcador_local: number; marcador_visitante: number }[]>([]);
 
   // Arbitrajes
-  const [arbitrajes, setArbitrajes] = useState<PartidoArbitraje[]>([]);
+  const [localArbitrajes, setLocalArbitrajes] = useState<PartidoArbitraje[]>([]);
   const [partidosArbitrajes, setPartidosArbitrajes] = useState<Record<number, PartidoArbitraje[]>>({});
 
   // Combinaciones pendientes
@@ -222,6 +223,7 @@ export default function Matchdays() {
       puntos_local: p.puntos_local || 0,
       puntos_visitante: p.puntos_visitante || 0,
       ubicacion_id: p.ubicacion_id || 0,
+      fecha_hora: p.fecha_hora?.slice(0, 16) || (viewJornada?.fecha ? viewJornada.fecha.split('T')[0] + 'T07:00' : ''),
       estatus: p.estatus || 'Por jugar',
       tipo: p.tipo || 'Oficial',
       observaciones: p.observaciones || '',
@@ -237,11 +239,12 @@ export default function Matchdays() {
       const list = Array.isArray(setsData) ? setsData : [];
       setSets(list);
       setLocalSets(list.map(s => ({ id: s.id, marcador_local: s.marcador_local, marcador_visitante: s.marcador_visitante })));
-      setArbitrajes(Array.isArray(arbitrajesData) ? arbitrajesData : []);
+      const arbList = Array.isArray(arbitrajesData) ? arbitrajesData : [];
+      setLocalArbitrajes(arbList.map(a => ({ ...a })));
     } catch {
       setSets([]);
       setLocalSets([]);
-      setArbitrajes([]);
+      setLocalArbitrajes([]);
     } finally {
       setLoadingSets(false);
     }
@@ -266,6 +269,7 @@ export default function Matchdays() {
         puntos_local: partidoForm.puntos_local,
         puntos_visitante: partidoForm.puntos_visitante,
         ubicacion_id: partidoForm.ubicacion_id || null,
+        fecha_hora: partidoForm.fecha_hora || null,
         estatus: partidoForm.estatus || 'Por jugar',
         tipo: partidoForm.tipo || 'Oficial',
         observaciones: partidoForm.observaciones || null,
@@ -276,6 +280,19 @@ export default function Matchdays() {
         if (localSets.length > 0) {
           await Promise.all(
             localSets.map(ls => api.updateSet(editingPartido.id, ls.id, { marcador_local: ls.marcador_local, marcador_visitante: ls.marcador_visitante }))
+          );
+        }
+        // Guardar arbitrajes editados
+        if (localArbitrajes.length > 0) {
+          await Promise.all(
+            localArbitrajes.map(arb => api.updateArbitraje(arb.id, {
+              partido_id: arb.partido_id,
+              equipo_id: arb.equipo_id,
+              pagado: arb.pagado,
+              monto: arb.monto,
+              fecha_pago: arb.fecha_pago,
+              observaciones: arb.observaciones,
+            }))
           );
         }
       } else {
@@ -348,23 +365,8 @@ export default function Matchdays() {
     setLocalSets(prev => prev.map(s => s.id === setId ? { ...s, [field]: value } : s));
   };
 
-  const handleUpdateArbitraje = async (arb: PartidoArbitraje, updates: Partial<PartidoArbitraje>) => {
-    try {
-      const updated = { ...arb, ...updates };
-      await api.updateArbitraje(arb.id, {
-        partido_id: updated.partido_id,
-        equipo_id: updated.equipo_id,
-        pagado: updated.pagado,
-        monto: updated.monto,
-        fecha_pago: updated.fecha_pago,
-        observaciones: updated.observaciones,
-      });
-      setArbitrajes(prev => prev.map(a => a.id === arb.id ? { ...a, ...updates } : a));
-      setToast({ message: 'Arbitraje actualizado', type: 'success' });
-    } catch (err) {
-      console.error(err);
-      setToast({ message: 'Error al actualizar arbitraje', type: 'error' });
-    }
+  const handleUpdateArbitraje = (arb: PartidoArbitraje, updates: Partial<PartidoArbitraje>) => {
+    setLocalArbitrajes(prev => prev.map(a => a.id === arb.id ? { ...a, ...updates } : a));
   };
 
   // Combinaciones pendientes
@@ -421,7 +423,7 @@ export default function Matchdays() {
             equipo_local_id: c.equipo_local_id,
             equipo_visitante_id: c.equipo_visitante_id,
             puntos_local: 0, puntos_visitante: 0,
-            ubicacion_id: null, estatus: 'Por jugar', tipo: 'Oficial', observaciones: null,
+            ubicacion_id: null, fecha_hora: null, estatus: 'Por jugar', tipo: 'Oficial', observaciones: null,
           })
         )
       );
@@ -479,7 +481,7 @@ export default function Matchdays() {
         <div className="empty-state"><Calendar size={48} /><p>No hay jornadas registradas</p></div>
       ) : viewMode === 'cards' ? (
         <div className="card-grid">
-          {[...jornadas].sort((a, b) => a.numero - b.numero).map(j => (
+          {[...jornadas].sort((a, b) => a.id - b.id).map(j => (
             <div key={j.id} className="card">
               <h3 className="card-title">Jornada {j.numero}</h3>
               <div className="card-details">
@@ -510,7 +512,7 @@ export default function Matchdays() {
               </tr>
             </thead>
             <tbody>
-              {[...jornadas].sort((a, b) => a.numero - b.numero).map(j => (
+              {[...jornadas].sort((a, b) => a.id - b.id).map(j => (
                 <tr key={j.id}>
                   <td><strong>Jornada {j.numero}</strong></td>
                   <td>{j.fecha ? new Date(j.fecha).toLocaleDateString() : '—'}</td>
@@ -576,22 +578,24 @@ export default function Matchdays() {
                       <th></th>
                       <th>Pts</th>
                       <th>Visitante</th>
+                      <th>Hora</th>
                       <th>Tipo</th>
                       <th>Ubicación</th>
                       <th>Estatus</th>
                       <th title="Arbitraje pagado">💰</th>
-                      <th>Observaciones</th>
+                      <th>Obs.</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {[...partidos].sort((a, b) => getTeamName(a.equipo_local_id).localeCompare(getTeamName(b.equipo_local_id))).map(p => (
+                    {[...partidos].sort((a, b) => a.id - b.id).map(p => (
                       <tr key={p.id} style={{ background: p.estatus === 'Jugado' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)' }}>
                         <td><strong>{getTeamName(p.equipo_local_id)}</strong></td>
                         <td className="text-center" style={{ fontWeight: 700, color: 'var(--accent)' }}>{p.puntos_local}</td>
                         <td className="text-center" style={{ color: 'var(--text-secondary)' }}>|</td>
                         <td className="text-center" style={{ fontWeight: 700, color: '#8b5cf6' }}>{p.puntos_visitante}</td>
                         <td><strong>{getTeamName(p.equipo_visitante_id)}</strong></td>
+                        <td>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                         <td>{p.tipo || '—'}</td>
                         <td>{p.ubicacion_id ? <button className="btn btn-sm btn-ghost" style={{ padding: 0, textDecoration: 'underline' }} onClick={() => { const u = ubicaciones.find(ub => ub.id === p.ubicacion_id); if (u) setViewUbicacion(u); }}>{getUbicacionName(p.ubicacion_id)}</button> : '—'}</td>
                         <td>{p.estatus || '—'}</td>
@@ -667,6 +671,10 @@ export default function Matchdays() {
 
         {/* Campos generales */}
         <div className="form-grid" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+          <div className="form-group">
+            <label>Fecha y hora</label>
+            <input type="datetime-local" value={partidoForm.fecha_hora} onChange={e => setPartidoForm({ ...partidoForm, fecha_hora: e.target.value })} />
+          </div>
           <div className="form-group">
             <label>Ubicación</label>
             <select value={partidoForm.ubicacion_id} onChange={e => setPartidoForm({ ...partidoForm, ubicacion_id: Number(e.target.value) })}>
@@ -788,7 +796,7 @@ export default function Matchdays() {
         )}
 
         {/* Arbitrajes section - solo en edición */}
-        {editingPartido && arbitrajes.length > 0 && (
+        {editingPartido && localArbitrajes.length > 0 && (
           <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
             <h4 style={{ marginBottom: '0.75rem' }}>Arbitrajes</h4>
             <div className="table-wrapper">
@@ -803,7 +811,7 @@ export default function Matchdays() {
                   </tr>
                 </thead>
                 <tbody>
-                  {arbitrajes.map(arb => (
+                  {localArbitrajes.map(arb => (
                     <tr key={arb.id}>
                       <td><strong>{getTeamName(arb.equipo_id)}</strong></td>
                       <td>

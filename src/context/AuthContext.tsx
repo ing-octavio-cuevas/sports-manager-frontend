@@ -8,6 +8,7 @@ interface Usuario {
   estatus: boolean;
   anfitrion_id: number | null;
   fecha_creacion: string;
+  requiere_cambio_password: boolean;
 }
 
 interface AuthContextType {

@@ -17,6 +17,9 @@ interface PartidoCapitan {
   estatus: string | null;
   tipo: string | null;
   ubicacion_id: number | null;
+  fecha_hora: string | null;
+  es_hoy: boolean;
+  caducado: boolean;
 }
 
 interface AsistenciaRegistro {
@@ -42,10 +45,12 @@ export default function Attendance() {
   const [selectedPartido, setSelectedPartido] = useState<PartidoCapitan | null>(null);
   const [partidosConAsistencia, setPartidosConAsistencia] = useState<Set<number>>(new Set());
   const [jornadasMap, setJornadasMap] = useState<Record<number, { numero: number; fecha: string }>>({});
+  const [ubicacionesMap, setUbicacionesMap] = useState<Record<number, { nombre: string; ubicacion: string }>>({});
 
   // Asistencias registradas
   const [asistencias, setAsistencias] = useState<AsistenciaRegistro[]>([]);
   const [loadingAsistencias, setLoadingAsistencias] = useState(false);
+  const [miFinalizada, setMiFinalizada] = useState(false);
 
   // Registro
   const [jugadoresIds, setJugadoresIds] = useState<number[]>([]);
@@ -96,8 +101,11 @@ export default function Attendance() {
       await Promise.all([
         ...list.map(async (p: PartidoCapitan) => {
           try {
-            const asist = await api.getAsistenciasPartido(p.id);
-            if (Array.isArray(asist) && asist.length > 0) conAsistencia.add(p.id);
+            const estado = await api.getEstadoAsistencia(p.id);
+            // Verificar si mi capitán ya registró
+            if (estado.registrado_por_local === capitanId || estado.registrado_por_visitante === capitanId) {
+              conAsistencia.add(p.id);
+            }
           } catch { /* ignore */ }
         }),
         ...torneoIds.map(async (torneoId: number) => {
@@ -111,6 +119,15 @@ export default function Attendance() {
       ]);
       setPartidosConAsistencia(conAsistencia);
       setJornadasMap(jMap);
+      // Cargar ubicaciones
+      const ubMap: Record<number, { nombre: string; ubicacion: string }> = {};
+      await Promise.all(torneoIds.map(async (tid: number) => {
+        try {
+          const ubs = await api.getUbicaciones(tid);
+          if (Array.isArray(ubs)) ubs.forEach((u: any) => { ubMap[u.id] = { nombre: u.nombre, ubicacion: u.ubicacion || '' }; });
+        } catch { /* ignore */ }
+      }));
+      setUbicacionesMap(ubMap);
     } catch (err) {
       console.error(err);
       setPartidos([]);
@@ -130,14 +147,14 @@ export default function Attendance() {
   const openPartido = async (p: PartidoCapitan) => {
     setSelectedPartido(p);
     setJugadoresIds([]);
+    setMiFinalizada(false);
     setLoadingAsistencias(true);
     try {
-      const [asistData, jugadoresData] = await Promise.all([
+      const [asistData, estadoData, jugadoresData] = await Promise.all([
         api.getAsistenciasPartido(p.id),
+        api.getEstadoAsistencia(p.id),
         // Cargar jugadores del equipo contrario
-        // Determinar cuál es el equipo contrario basado en el capitán
         (async () => {
-          // Buscar en qué equipo está el capitán
           const localJugadores = await api.getJugadores(p.equipo_local_id);
           const localList = Array.isArray(localJugadores) ? localJugadores : [];
           const capitanEnLocal = localList.some((j: any) => j.id === capitanId);
@@ -148,6 +165,9 @@ export default function Attendance() {
       ]);
       setAsistencias(Array.isArray(asistData) ? asistData : []);
       setJugadoresContrario(jugadoresData.filter((j: any) => j.estatus));
+      // Verificar si yo ya finalicé
+      const yaFinalice = estadoData.registrado_por_local === capitanId || estadoData.registrado_por_visitante === capitanId;
+      setMiFinalizada(yaFinalice);
     } catch {
       setAsistencias([]);
       setJugadoresContrario([]);
@@ -285,6 +305,7 @@ export default function Attendance() {
 
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [viewPhoto, setViewPhoto] = useState<{ url: string; nombre: string } | null>(null);
+  const [filtroAsistencia, setFiltroAsistencia] = useState<'hoy' | 'caducadas'>('hoy');
 
   // Guardar asistencias
   const handleSaveAsistencias = async () => {
@@ -300,6 +321,7 @@ export default function Attendance() {
       const data = await api.getAsistenciasPartido(selectedPartido.id);
       setAsistencias(Array.isArray(data) ? data : []);
       setJugadoresIds([]);
+      setMiFinalizada(true);
       setToast({ message: 'Asistencias registradas correctamente', type: 'success' });
     } catch (err: any) {
       console.error(err);
@@ -338,15 +360,35 @@ export default function Attendance() {
         </div>
       ) : !selectedPartido ? (
         <div>
-          <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Selecciona un partido para registrar asistencia:</p>
-          <div className="card-grid">
-            {partidos.map(p => (
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+            <button className={`btn btn-sm ${filtroAsistencia === 'hoy' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFiltroAsistencia('hoy')}>Hoy</button>
+            <button className={`btn btn-sm ${filtroAsistencia === 'caducadas' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFiltroAsistencia('caducadas')}>Pasados</button>
+          </div>
+          {(() => {
+            const filtrados = partidos.filter(p => {
+              if (filtroAsistencia === 'hoy') return p.es_hoy;
+              return p.caducado;
+            });
+            return filtrados.length === 0 ? (
+              <div className="empty-state">
+                <UserCheck size={48} />
+                <p>{filtroAsistencia === 'hoy' ? 'No hay partidos programados para hoy.' : 'No hay partidos pasados.'}</p>
+              </div>
+            ) : (
+              <div className="card-grid">
+                {filtrados.map(p => (
               <div key={p.id} className="card" style={{ cursor: 'pointer', borderLeft: partidosConAsistencia.has(p.id) ? '4px solid var(--success)' : undefined }} onClick={() => openPartido(p)}>
                 <h3 className="card-title">{getTeamName(p.equipo_local_id)} vs {getTeamName(p.equipo_visitante_id)}</h3>
                 <div className="card-details">
                   <p><strong>Torneo:</strong> {getTorneoName(p.torneo_id)}</p>
                   <p><strong>Jornada:</strong> {jornadasMap[p.jornada_id]?.numero ? `Jornada ${jornadasMap[p.jornada_id].numero}` : '—'}</p>
-                  <p><strong>Fecha:</strong> {jornadasMap[p.jornada_id]?.fecha ? new Date(jornadasMap[p.jornada_id].fecha).toLocaleDateString() : '—'}</p>
+                  <p><strong>Fecha:</strong> {p.fecha_hora ? new Date(p.fecha_hora).toLocaleDateString() : jornadasMap[p.jornada_id]?.fecha ? new Date(jornadasMap[p.jornada_id].fecha).toLocaleDateString() : '—'}</p>
+                  <p><strong>Hora:</strong> {p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
+                  <p><strong>Lugar:</strong> {p.ubicacion_id && ubicacionesMap[p.ubicacion_id] ? (
+                    ubicacionesMap[p.ubicacion_id].ubicacion
+                      ? <a href={ubicacionesMap[p.ubicacion_id].ubicacion} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{ubicacionesMap[p.ubicacion_id].nombre}</a>
+                      : ubicacionesMap[p.ubicacion_id].nombre
+                  ) : '—'}</p>
                   <p><strong>Tipo:</strong> {p.tipo || '—'}</p>
                   {partidosConAsistencia.has(p.id) && (
                     <p style={{ color: 'var(--success)', fontWeight: 600 }}>✓ Asistencia registrada</p>
@@ -355,6 +397,8 @@ export default function Attendance() {
               </div>
             ))}
           </div>
+            );
+          })()}
         </div>
       ) : (
         <div>
@@ -364,7 +408,7 @@ export default function Attendance() {
 
           <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow)', marginBottom: '1.5rem' }}>
             <h3 style={{ marginBottom: '0.5rem' }}>{getTeamName(selectedPartido.equipo_local_id)} vs {getTeamName(selectedPartido.equipo_visitante_id)}</h3>
-            {asistencias.length > 0 ? (
+            {miFinalizada ? (
               <p style={{ color: 'var(--success)', fontSize: '0.85rem', fontWeight: 600 }}>✓ Asistencia finalizada</p>
             ) : (
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Escanea o ingresa el código QR de cada jugador del equipo contrario.</p>
@@ -372,7 +416,7 @@ export default function Attendance() {
           </div>
 
           {/* Registro - solo si no se ha finalizado */}
-          {asistencias.length === 0 && (
+          {!miFinalizada && (
             <>
               <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
             <form onSubmit={handleManualSubmit} style={{ display: 'flex', gap: '0.5rem', flex: 1, minWidth: 250 }}>

@@ -3,6 +3,7 @@ import { AppProvider } from '@/context/AppContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import Layout from '@/components/Layout';
 import Login from '@/pages/Login';
+import ChangePassword from '@/pages/ChangePassword';
 import Tournaments from '@/pages/Tournaments';
 import Teams from '@/pages/Teams';
 import Matchdays from '@/pages/Matchdays';
@@ -21,8 +22,9 @@ function DefaultRedirect() {
 }
 
 function ProtectedRoutes() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, usuario } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (usuario?.requiere_cambio_password) return <Navigate to="/cambiar-password" replace />;
   return (
     <AppProvider>
       <Routes>
@@ -48,6 +50,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/cambiar-password" element={<ChangePassword />} />
           <Route path="/*" element={<ProtectedRoutes />} />
         </Routes>
       </BrowserRouter>

@@ -360,7 +360,7 @@ body {
 }
 
 .modal-wide { max-width: 720px; }
-.modal-extra-wide { max-width: 960px; }
+.modal-extra-wide { max-width: 1100px; }
 .modal-sm { max-width: 380px; }
 
 .modal-header {

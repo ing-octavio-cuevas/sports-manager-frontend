@@ -68,6 +68,7 @@ export default function Teams() {
   const [viewTeam, setViewTeam] = useState<Team | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [playerCounts, setPlayerCounts] = useState<Record<number, number>>({});
+  const [teamsWithCaptain, setTeamsWithCaptain] = useState<Set<number>>(new Set());
 
   // Players state
   const [playersTeam, setPlayersTeam] = useState<Team | null>(null);
@@ -91,17 +92,21 @@ export default function Teams() {
       setError(null);
       // Cargar conteo de jugadores por equipo
       const counts: Record<number, number> = {};
+      const withCaptain = new Set<number>();
       await Promise.all(
         data.map(async (t: Team) => {
           try {
             const jugadores = await api.getJugadores(t.id);
-            counts[t.id] = Array.isArray(jugadores) ? jugadores.length : 0;
+            const list = Array.isArray(jugadores) ? jugadores : [];
+            counts[t.id] = list.length;
+            if (list.some((j: any) => j.es_capitan)) withCaptain.add(t.id);
           } catch {
             counts[t.id] = 0;
           }
         })
       );
       setPlayerCounts(counts);
+      setTeamsWithCaptain(withCaptain);
     } catch (err) {
       setError('Error al cargar los equipos');
       console.error(err);
@@ -204,6 +209,12 @@ export default function Teams() {
       const list = Array.isArray(data) ? data : [data];
       setPlayers(list);
       setPlayerCounts(prev => ({ ...prev, [playersTeam.id]: list.length }));
+      // Actualizar estado de capitán
+      if (list.some((j: any) => j.es_capitan)) {
+        setTeamsWithCaptain(prev => new Set([...prev, playersTeam.id]));
+      } else {
+        setTeamsWithCaptain(prev => { const next = new Set(prev); next.delete(playersTeam.id); return next; });
+      }
     } catch {
       setPlayers([]);
     }
@@ -224,7 +235,7 @@ export default function Teams() {
       estatus: p.estatus,
       es_capitan: p.es_capitan || false,
       curp: p.curp || '',
-      email: '',
+      email: p.email || '',
     });
     setPlayerModalOpen(true);
   };
@@ -233,6 +244,10 @@ export default function Teams() {
     if (!playerForm.nombre.trim() || !playersTeam) return;
     if (playerForm.es_capitan && !playerForm.email.trim()) {
       setToast({ message: 'El email es obligatorio para capitanes', type: 'error' });
+      return;
+    }
+    if (playerForm.es_capitan && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(playerForm.email.trim())) {
+      setToast({ message: 'Ingresa un correo electrónico válido', type: 'error' });
       return;
     }
     const toTitleCase = (str: string) => str.replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
@@ -249,6 +264,7 @@ export default function Teams() {
           fecha_creacion: editingPlayer.fecha_creacion,
           foto: editingPlayer.foto,
           curp: playerForm.curp || null,
+          email: playerForm.email || null,
         });
       } else {
         await api.createJugador({
@@ -261,30 +277,8 @@ export default function Teams() {
           fecha_creacion: new Date().toISOString(),
           foto: null,
           curp: playerForm.curp || null,
+          email: playerForm.email || null,
         });
-      }
-      // Si es capitán, crear usuario y asociar
-      if (playerForm.es_capitan && playerForm.email.trim()) {
-        try {
-          // Obtener el jugador creado/editado
-          const updatedPlayers = await api.getJugadores(playersTeam.id);
-          const jugadorList = Array.isArray(updatedPlayers) ? updatedPlayers : [];
-          const jugador = editingPlayer
-            ? editingPlayer
-            : jugadorList.find((j: any) => j.nombre === nombre && j.equipo_id === playersTeam.id);
-
-          if (jugador) {
-            await api.createUsuario({
-              email: playerForm.email.trim(),
-              password: 'root',
-              nombre,
-              roles: ['jugador'],
-              jugador_id: jugador.id,
-            });
-          }
-        } catch (err: any) {
-          console.error('Error creando usuario:', err);
-        }
       }
       await refreshPlayers();
       setPlayerModalOpen(false);
@@ -397,7 +391,12 @@ export default function Teams() {
                 </p>
               </div>
               <div className="card-actions">
-                <button className="btn btn-sm btn-ghost" onClick={() => openPlayers(t)}><Users size={16} /> Jugadores ({playerCounts[t.id] ?? 0})</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => openPlayers(t)}>
+                  <span style={{ position: 'relative', display: 'inline-flex' }}>
+                    <Users size={16} />
+                    <span style={{ position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: '50%', background: teamsWithCaptain.has(t.id) ? 'var(--success)' : 'var(--warning)' }} />
+                  </span> Jugadores ({playerCounts[t.id] ?? 0})
+                </button>
                 <button className="btn btn-sm btn-ghost" onClick={() => setViewTeam(t)}><Eye size={16} /> Ver</button>
                 {isHost && (
                   <>
@@ -436,7 +435,12 @@ export default function Teams() {
                   <td><span className={`badge ${t.inscripcion_pagada ? 'badge-active' : 'badge-inactive'}`}>{t.inscripcion_pagada ? 'Pagada' : 'Pendiente'}</span></td>
                   <td>{t.monto_pagado !== null ? `$${t.monto_pagado}` : '—'}</td>
                   <td>
-                    <button className="btn btn-sm btn-ghost" onClick={() => openPlayers(t)} title="Jugadores"><Users size={16} /> {playerCounts[t.id] ?? 0}</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => openPlayers(t)} title="Jugadores">
+                      <span style={{ position: 'relative', display: 'inline-flex' }}>
+                        <Users size={16} />
+                        <span style={{ position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: '50%', background: teamsWithCaptain.has(t.id) ? 'var(--success)' : 'var(--warning)' }} />
+                      </span> {playerCounts[t.id] ?? 0}
+                    </button>
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.25rem' }}>

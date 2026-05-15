@@ -487,11 +487,6 @@ export default function Tournaments() {
                           <div>
                             <p className="court-name">{u.nombre}</p>
                             {u.direccion && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{u.direccion}</p>}
-                            {u.ubicacion && (
-                              <a href={u.ubicacion} target="_blank" rel="noopener noreferrer" className="court-map-link">
-                                <MapPin size={14} /> Ver en mapa
-                              </a>
-                            )}
                           </div>
                           {isHost && (
                             <div style={{ display: 'flex', gap: '0.25rem' }}>

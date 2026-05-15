@@ -119,6 +119,7 @@ export interface Partido {
   puntos_local: number;
   puntos_visitante: number;
   ubicacion_id: number | null;
+  fecha_hora: string | null;
   estatus: string | null;
   tipo: string | null;
   observaciones: string | null;

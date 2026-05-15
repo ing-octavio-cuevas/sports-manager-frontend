@@ -14,6 +14,7 @@ interface PartidoInfo {
   puntos_local: number;
   puntos_visitante: number;
   ubicacion_id: number | null;
+  fecha_hora: string | null;
   estatus: string;
   tipo: string;
 }
@@ -40,6 +41,8 @@ export default function MyInfo() {
   const [loading, setLoading] = useState(true);
   const [selectedTorneo, setSelectedTorneo] = useState<TorneoInfo | null>(null);
   const [equiposMap, setEquiposMap] = useState<Record<number, string>>({});
+  const [ubicacionesMap, setUbicacionesMap] = useState<Record<number, { nombre: string; direccion: string; ubicacion: string }>>({});
+  const [viewUbicacion, setViewUbicacion] = useState<{ nombre: string; direccion: string; ubicacion: string } | null>(null);
 
   // Detalle partido
   const [viewPartido, setViewPartido] = useState<PartidoInfo | null>(null);
@@ -61,6 +64,7 @@ export default function MyInfo() {
   const [loadingMiEquipo, setLoadingMiEquipo] = useState(false);
   const [editingJugador, setEditingJugador] = useState<any | null>(null);
   const [jugadorForm, setJugadorForm] = useState({ nombre: '', numero: 0, posicion: '', estatus: true, curp: '' });
+  const [asistenciaMap, setAsistenciaMap] = useState<Record<number, { partidos_asistidos: number; total_partidos: number; porcentaje_asistencia: number }>>({});
 
   // Equipo contrario
   const [showEquipoContrario, setShowEquipoContrario] = useState(false);
@@ -84,6 +88,16 @@ export default function MyInfo() {
           equipos.forEach((e: any) => { map[e.id] = e.nombre; });
         }
         setEquiposMap(map);
+        // Cargar ubicaciones de los torneos
+        const ubMap: Record<number, { nombre: string; direccion: string; ubicacion: string }> = {};
+        const torneoIds = [...new Set(data.torneos.map((t: TorneoInfo) => t.torneo_id))] as number[];
+        await Promise.all(torneoIds.map(async (tid: number) => {
+          try {
+            const ubs = await api.getUbicaciones(tid);
+            if (Array.isArray(ubs)) ubs.forEach((u: any) => { ubMap[u.id] = { nombre: u.nombre, direccion: u.direccion || '', ubicacion: u.ubicacion || '' }; });
+          } catch { /* ignore */ }
+        }));
+        setUbicacionesMap(ubMap);
       } catch (err) {
         console.error(err);
       } finally {
@@ -128,10 +142,24 @@ export default function MyInfo() {
     setShowMiEquipo(true);
     setLoadingMiEquipo(true);
     try {
-      const data = await api.getJugadores(equipoId);
+      const [data, resumen] = await Promise.all([
+        api.getJugadores(equipoId),
+        selectedTorneo ? api.getResumenAsistencia(equipoId, selectedTorneo.torneo_id) : Promise.resolve(null),
+      ]);
       setMiEquipoJugadores(Array.isArray(data) ? data : []);
+      // Mapear asistencia por jugador_id
+      if (resumen && Array.isArray(resumen.jugadores)) {
+        const map: Record<number, { partidos_asistidos: number; total_partidos: number; porcentaje_asistencia: number }> = {};
+        resumen.jugadores.forEach((j: any) => {
+          map[j.jugador_id] = { partidos_asistidos: j.partidos_asistidos, total_partidos: j.total_partidos, porcentaje_asistencia: j.porcentaje_asistencia };
+        });
+        setAsistenciaMap(map);
+      } else {
+        setAsistenciaMap({});
+      }
     } catch {
       setMiEquipoJugadores([]);
+      setAsistenciaMap({});
     } finally {
       setLoadingMiEquipo(false);
     }
@@ -277,7 +305,7 @@ export default function MyInfo() {
         </div>
       ) : !selectedTorneo ? (
         <div className="card-grid">
-          {[...info.torneos].sort((a, b) => a.torneo_id - b.torneo_id).map(t => (
+          {[...info.torneos].filter((t, i, arr) => arr.findIndex(x => x.torneo_id === t.torneo_id) === i).sort((a, b) => a.torneo_id - b.torneo_id).map(t => (
             <div key={t.torneo_id} className="card" style={{ cursor: 'pointer' }} onClick={async () => {
               setSelectedTorneo(t);
               // Cargar arbitrajes de los partidos
@@ -348,6 +376,9 @@ export default function MyInfo() {
                     <th>Local</th>
                     <th></th>
                     <th>Visitante</th>
+                    <th>Fecha</th>
+                    <th>Hora</th>
+                    <th>Lugar</th>
                     <th>Tipo</th>
                     <th>Estatus</th>
                     <th title="Arbitraje pagado">💰</th>
@@ -361,6 +392,9 @@ export default function MyInfo() {
                       <td><strong>{equiposMap[p.equipo_local_id] || `Eq. ${p.equipo_local_id}`}</strong></td>
                       <td className="text-center" style={{ fontWeight: 700 }}>{p.puntos_local} | {p.puntos_visitante}</td>
                       <td><strong>{equiposMap[p.equipo_visitante_id] || `Eq. ${p.equipo_visitante_id}`}</strong></td>
+                      <td>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleDateString() : '—'}</td>
+                      <td>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                      <td>{p.ubicacion_id && ubicacionesMap[p.ubicacion_id] ? <button className="btn btn-sm btn-ghost" style={{ padding: 0, textDecoration: 'underline' }} onClick={(e) => { e.stopPropagation(); setViewUbicacion(ubicacionesMap[p.ubicacion_id!]); }}>{ubicacionesMap[p.ubicacion_id].nombre}</button> : '—'}</td>
                       <td>{p.tipo}</td>
                       <td><span className={`badge badge-${p.estatus === 'Jugado' ? 'active' : 'warning'}`}>{p.estatus}</span></td>
                       <td className="text-center">
@@ -452,6 +486,11 @@ export default function MyInfo() {
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>#{j.numero} · {j.posicion || 'Sin posición'}</p>
                       </div>
                     </div>
+                    {asistenciaMap[j.id] && (
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                        📋 Asistencia: <strong>{asistenciaMap[j.id].porcentaje_asistencia.toFixed(1)}%</strong> ({asistenciaMap[j.id].partidos_asistidos}/{asistenciaMap[j.id].total_partidos})
+                      </p>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span className={`badge badge-${j.estatus ? 'active' : 'inactive'}`}>{j.estatus ? 'Activo' : 'Inactivo'}</span>
                       <div style={{ display: 'flex', gap: '0.25rem' }}>
@@ -474,6 +513,7 @@ export default function MyInfo() {
                       <th>#</th>
                       <th>Posición</th>
                       <th>Capitán</th>
+                      <th>Asistencia</th>
                       <th>Estatus</th>
                       <th>QR</th>
                       {selectedTorneo?.es_capitan && <th>Acciones</th>}
@@ -487,6 +527,11 @@ export default function MyInfo() {
                         <td>{j.numero}</td>
                         <td>{j.posicion}</td>
                         <td className="text-center">{j.es_capitan ? '⭐' : '—'}</td>
+                        <td className="text-center">
+                          {asistenciaMap[j.id]
+                            ? <span title={`${asistenciaMap[j.id].partidos_asistidos}/${asistenciaMap[j.id].total_partidos} partidos`}>{asistenciaMap[j.id].porcentaje_asistencia.toFixed(1)}%</span>
+                            : '—'}
+                        </td>
                         <td><span className={`badge badge-${j.estatus ? 'active' : 'inactive'}`}>{j.estatus ? 'Activo' : 'Inactivo'}</span></td>
                         <td className="text-center">
                           {j.codigo_qr ? (
@@ -529,7 +574,6 @@ export default function MyInfo() {
                   <th>#</th>
                   <th>Posición</th>
                   <th>Capitán</th>
-                  <th>QR</th>
                 </tr>
               </thead>
               <tbody>
@@ -540,7 +584,6 @@ export default function MyInfo() {
                     <td>{j.numero}</td>
                     <td>{j.posicion}</td>
                     <td className="text-center">{j.es_capitan ? '⭐' : '—'}</td>
-                    <td className="text-center">{j.codigo_qr ? <button className="btn btn-sm btn-ghost" onClick={() => setViewQR({ codigo: j.codigo_qr, nombre: j.nombre })}><QrCode size={16} /></button> : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -680,6 +723,23 @@ export default function MyInfo() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Ubicacion Modal */}
+      <Modal open={!!viewUbicacion} onClose={() => setViewUbicacion(null)} title={viewUbicacion?.nombre || 'Ubicación'}>
+        {viewUbicacion && (
+          <div>
+            <div className="detail-grid" style={{ marginBottom: '1rem' }}>
+              <p><strong>Nombre:</strong> {viewUbicacion.nombre}</p>
+              <p><strong>Dirección:</strong> {viewUbicacion.direccion || '—'}</p>
+            </div>
+            {viewUbicacion.ubicacion && (
+              <a href={viewUbicacion.ubicacion} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-primary">
+                Abrir en Google Maps
+              </a>
+            )}
           </div>
         )}
       </Modal>

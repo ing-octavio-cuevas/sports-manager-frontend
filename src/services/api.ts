@@ -125,11 +125,25 @@ export const api = {
   // Asistencias
   getPartidosCapitan: (capitanId: number) => get(`${BASE_URL}/asistencias/capitan/${capitanId}/partidos`),
   getAsistenciasPartido: (partidoId: number) => get(`${BASE_URL}/asistencias/partido/${partidoId}`),
+  getEstadoAsistencia: (partidoId: number) => get(`${BASE_URL}/asistencias/partido/${partidoId}/estado`),
   registrarAsistencias: (data: { partido_id: number; jugador_ids: number[]; registrado_por: number }) => post(`${BASE_URL}/asistencias`, data),
+  getResumenAsistencia: (equipoId: number, torneoId: number) => get(`${BASE_URL}/asistencias/equipo/${equipoId}/resumen?torneo_id=${torneoId}`),
 
   // Jugador - Mi información
   getMiInformacion: () => get(`${BASE_URL}/jugadores/mi-informacion`),
 
   // Usuarios
   createUsuario: (data: { email: string; password: string; nombre: string; roles: string[]; jugador_id: number }) => post(`${BASE_URL}/usuarios`, data),
+  async cambiarPassword(newPassword: string) {
+    const res = await fetch(`${BASE_URL}/auth/cambiar-password`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ new_password: newPassword }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.detail || 'Error al cambiar contraseña');
+    }
+    return res.json();
+  },
 };
