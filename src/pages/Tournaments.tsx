@@ -33,7 +33,7 @@ const emptyForm: TournamentForm = {
   periodo: '',
   categoria: '',
   numero_vueltas: 1,
-  anfitrion_id: 1,
+  anfitrion_id: 0,
 };
 
 export default function Tournaments() {
@@ -80,7 +80,7 @@ export default function Tournaments() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, anfitrion_id: usuario?.anfitrion_id || 0 });
     setModalOpen(true);
   };
 
