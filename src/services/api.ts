@@ -134,6 +134,8 @@ export const api = {
 
   // Usuarios
   createUsuario: (data: { celular: string; password: string; nombre: string; roles: string[]; jugador_id: number }) => post(`${BASE_URL}/usuarios`, data),
+  recuperarPassword: (data: { celular?: string; email?: string }) => post(`${BASE_URL}/auth/recuperar-password`, data),
+  verificarCodigoReset: (data: { celular: string; codigo: string; new_password: string }) => post(`${BASE_URL}/auth/verificar-codigo-reset`, data),
   async cambiarPassword(newPassword: string) {
     const res = await fetch(`${BASE_URL}/auth/cambiar-password`, {
       method: 'PUT',

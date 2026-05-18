@@ -27,6 +27,7 @@ interface PlayerForm {
   es_capitan: boolean;
   curp: string;
   celular: string;
+  email: string;
 }
 
 const emptyForm: TeamForm = {
@@ -47,6 +48,7 @@ const emptyPlayerForm: PlayerForm = {
   es_capitan: false,
   curp: '',
   celular: '',
+  email: '',
 };
 
 export default function Teams() {
@@ -236,6 +238,7 @@ export default function Teams() {
       es_capitan: p.es_capitan || false,
       curp: p.curp || '',
       celular: p.celular || '',
+      email: p.email || '',
     });
     setPlayerModalOpen(true);
   };
@@ -248,6 +251,14 @@ export default function Teams() {
     }
     if (playerForm.es_capitan && !/^\d{10}$/.test(playerForm.celular.trim())) {
       setToast({ message: 'Ingresa un número de celular válido (10 dígitos)', type: 'error' });
+      return;
+    }
+    if (playerForm.es_capitan && !playerForm.email.trim()) {
+      setToast({ message: 'El email es obligatorio para capitanes', type: 'error' });
+      return;
+    }
+    if (playerForm.es_capitan && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(playerForm.email.trim())) {
+      setToast({ message: 'Ingresa un correo electrónico válido', type: 'error' });
       return;
     }
     const toTitleCase = (str: string) => str.replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
@@ -265,6 +276,7 @@ export default function Teams() {
           foto: editingPlayer.foto,
           curp: playerForm.curp || null,
           celular: playerForm.celular || null,
+          email: playerForm.email || null,
         });
       } else {
         await api.createJugador({
@@ -278,6 +290,7 @@ export default function Teams() {
           foto: null,
           curp: playerForm.curp || null,
           celular: playerForm.celular || null,
+          email: playerForm.email || null,
         });
       }
       await refreshPlayers();
@@ -652,6 +665,12 @@ export default function Teams() {
             <div className="form-group">
               <label>Celular del capitán *</label>
               <input type="tel" value={playerForm.celular} onChange={e => { const v = e.target.value.replace(/\D/g, ''); setPlayerForm({ ...playerForm, celular: v }); }} placeholder="5512345678" maxLength={10} />
+            </div>
+          )}
+          {playerForm.es_capitan && (
+            <div className="form-group">
+              <label>Email del capitán *</label>
+              <input type="email" value={playerForm.email} onChange={e => setPlayerForm({ ...playerForm, email: e.target.value })} placeholder="correo@ejemplo.com" />
             </div>
           )}
         </div>
