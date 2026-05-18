@@ -2,9 +2,12 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   Trophy, Users, Calendar, ClipboardList, Shield,
-  Menu, X, LogOut, UserCheck, User, ChevronDown
+  Menu, X, LogOut, UserCheck, User, ChevronDown, Lock
 } from 'lucide-react';
 import { useState } from 'react';
+import Modal from '@/components/ui/Modal';
+import Toast from '@/components/ui/Toast';
+import { api } from '@/services/api';
 
 const roleLabels: Record<string, string> = {
   anfitrion: 'Anfitrión',
@@ -22,6 +25,41 @@ export default function Layout() {
     return usuario?.roles?.[0] || 'anfitrion';
   });
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+  const [changePassOpen, setChangePassOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPass, setSavingPass] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const handleChangePassword = async () => {
+    if (!newPassword || !confirmPassword) return;
+    if (newPassword !== confirmPassword) {
+      setToast({ message: 'Las contraseñas no coinciden', type: 'error' });
+      return;
+    }
+    if (newPassword.length < 4) {
+      setToast({ message: 'La contraseña debe tener al menos 4 caracteres', type: 'error' });
+      return;
+    }
+    setSavingPass(true);
+    try {
+      await api.cambiarPassword(newPassword);
+      const stored = localStorage.getItem('voleibol_usuario');
+      if (stored) {
+        const user = JSON.parse(stored);
+        user.requiere_cambio_password = false;
+        localStorage.setItem('voleibol_usuario', JSON.stringify(user));
+      }
+      setToast({ message: 'Contraseña actualizada correctamente', type: 'success' });
+      setChangePassOpen(false);
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setToast({ message: err.message || 'Error al cambiar contraseña', type: 'error' });
+    } finally {
+      setSavingPass(false);
+    }
+  };
 
   const handleRoleChange = (role: string) => {
     setActiveRole(role);
@@ -71,7 +109,13 @@ export default function Layout() {
           <div className="role-selector">
             <span className="role-label">Sesión activa</span>
             <p style={{ color: 'white', fontSize: '0.85rem', fontWeight: 600, marginTop: '0.25rem' }}>{usuario.nombre}</p>
-            <p style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem' }}>{usuario.email}</p>
+            <p style={{ color: 'var(--sidebar-text)', fontSize: '0.75rem' }}>{usuario.celular || ''}</p>
+            <button
+              onClick={() => setChangePassOpen(true)}
+              style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.75rem', cursor: 'pointer', padding: 0, marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+            >
+              <Lock size={12} /> Cambiar contraseña
+            </button>
 
             {hasMultipleRoles ? (
               <div style={{ position: 'relative', marginTop: '0.5rem' }}>
@@ -143,6 +187,28 @@ export default function Layout() {
       <main className="main-content">
         <Outlet />
       </main>
+
+      {/* Cambiar contraseña modal */}
+      <Modal open={changePassOpen} onClose={() => { setChangePassOpen(false); setNewPassword(''); setConfirmPassword(''); }} title="Cambiar contraseña">
+        <div className="form-stack">
+          <div className="form-group">
+            <label>Nueva contraseña</label>
+            <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="••••••••" />
+          </div>
+          <div className="form-group">
+            <label>Confirmar contraseña</label>
+            <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={() => { setChangePassOpen(false); setNewPassword(''); setConfirmPassword(''); }}>Cancelar</button>
+          <button className="btn btn-primary" onClick={handleChangePassword} disabled={savingPass}>
+            {savingPass ? 'Guardando...' : 'Cambiar contraseña'}
+          </button>
+        </div>
+      </Modal>
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }

@@ -2,7 +2,8 @@ import { createContext, useContext, useState, useCallback, type ReactNode } from
 
 interface Usuario {
   id: number;
-  email: string;
+  celular: string;
+  email: string | null;
   nombre: string;
   roles: string[];
   estatus: boolean;
@@ -15,7 +16,7 @@ interface AuthContextType {
   token: string | null;
   usuario: Usuario | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (celular: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -33,11 +34,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch { return null; }
   });
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (celular: string, password: string) => {
     const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ celular, password }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => null);

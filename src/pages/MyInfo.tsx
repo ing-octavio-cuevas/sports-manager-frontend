@@ -32,7 +32,8 @@ interface TorneoInfo {
 interface MiInformacion {
   usuario_id: number;
   nombre: string;
-  email: string;
+  celular: string;
+  email: string | null;
   torneos: TorneoInfo[];
 }
 
@@ -293,7 +294,7 @@ export default function MyInfo() {
       {/* Info del jugador */}
       <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow)', marginBottom: '1.5rem' }}>
         <h3 style={{ marginBottom: '0.5rem' }}>{info.nombre}</h3>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{info.email}</p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{info.celular}{info.email ? ` · ${info.email}` : ''}</p>
       </div>
 
       {/* Torneos */}
@@ -432,7 +433,7 @@ export default function MyInfo() {
             <div className="form-stack">
               <div className="form-group">
                 <label>Nombre *</label>
-                <input value={jugadorForm.nombre} onChange={e => setJugadorForm({ ...jugadorForm, nombre: e.target.value })} placeholder="Nombre completo" />
+                <input value={jugadorForm.nombre} onChange={e => { if (editingJugador === 'new') setJugadorForm({ ...jugadorForm, nombre: e.target.value }); }} placeholder="Nombre completo" disabled={editingJugador !== 'new'} style={editingJugador !== 'new' ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
               </div>
               <div className="form-group">
                 <label>Número</label>

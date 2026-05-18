@@ -26,7 +26,7 @@ interface PlayerForm {
   estatus: boolean;
   es_capitan: boolean;
   curp: string;
-  email: string;
+  celular: string;
 }
 
 const emptyForm: TeamForm = {
@@ -46,7 +46,7 @@ const emptyPlayerForm: PlayerForm = {
   estatus: true,
   es_capitan: false,
   curp: '',
-  email: '',
+  celular: '',
 };
 
 export default function Teams() {
@@ -235,19 +235,19 @@ export default function Teams() {
       estatus: p.estatus,
       es_capitan: p.es_capitan || false,
       curp: p.curp || '',
-      email: p.email || '',
+      celular: p.celular || '',
     });
     setPlayerModalOpen(true);
   };
 
   const handleSavePlayer = async () => {
     if (!playerForm.nombre.trim() || !playersTeam) return;
-    if (playerForm.es_capitan && !playerForm.email.trim()) {
-      setToast({ message: 'El email es obligatorio para capitanes', type: 'error' });
+    if (playerForm.es_capitan && !playerForm.celular.trim()) {
+      setToast({ message: 'El celular es obligatorio para capitanes', type: 'error' });
       return;
     }
-    if (playerForm.es_capitan && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(playerForm.email.trim())) {
-      setToast({ message: 'Ingresa un correo electrónico válido', type: 'error' });
+    if (playerForm.es_capitan && !/^\d{10}$/.test(playerForm.celular.trim())) {
+      setToast({ message: 'Ingresa un número de celular válido (10 dígitos)', type: 'error' });
       return;
     }
     const toTitleCase = (str: string) => str.replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
@@ -264,7 +264,7 @@ export default function Teams() {
           fecha_creacion: editingPlayer.fecha_creacion,
           foto: editingPlayer.foto,
           curp: playerForm.curp || null,
-          email: playerForm.email || null,
+          celular: playerForm.celular || null,
         });
       } else {
         await api.createJugador({
@@ -277,7 +277,7 @@ export default function Teams() {
           fecha_creacion: new Date().toISOString(),
           foto: null,
           curp: playerForm.curp || null,
-          email: playerForm.email || null,
+          celular: playerForm.celular || null,
         });
       }
       await refreshPlayers();
@@ -548,7 +548,7 @@ export default function Teams() {
                       <th>Capitán</th>
                       <th>Estatus</th>
                       <th>CURP</th>
-                      <th>Email</th>
+                      <th>Celular</th>
                       <th>QR</th>
                       {isHost && <th>Acciones</th>}
                     </tr>
@@ -570,7 +570,7 @@ export default function Teams() {
                         <td className="text-center">{p.es_capitan ? '⭐' : '—'}</td>
                         <td><span className={`badge badge-${p.estatus ? 'active' : 'inactive'}`}>{p.estatus ? 'Activo' : 'Inactivo'}</span></td>
                         <td>{p.curp || '—'}</td>
-                        <td>{p.email || '—'}</td>
+                        <td>{p.celular || '—'}</td>
                         <td className="text-center">
                           {p.codigo_qr ? (
                             <button className="btn btn-sm btn-ghost" onClick={() => setViewQR({ codigo: p.codigo_qr, nombre: p.nombre })} title="Ver QR">
@@ -603,7 +603,7 @@ export default function Teams() {
         <div className="form-stack">
           <div className="form-group">
             <label>Nombre completo *</label>
-            <input value={playerForm.nombre} onChange={e => setPlayerForm({ ...playerForm, nombre: e.target.value })} placeholder="Ej: Juan Pérez" />
+            <input value={playerForm.nombre} onChange={e => { if (!editingPlayer) setPlayerForm({ ...playerForm, nombre: e.target.value }); }} placeholder="Ej: Juan Pérez" disabled={!!editingPlayer} style={editingPlayer ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
           </div>
           <div className="form-group">
             <label>Número</label>
@@ -650,8 +650,8 @@ export default function Teams() {
           </div>
           {playerForm.es_capitan && (
             <div className="form-group">
-              <label>Email del capitán *</label>
-              <input type="email" value={playerForm.email} onChange={e => setPlayerForm({ ...playerForm, email: e.target.value })} placeholder="correo@ejemplo.com" />
+              <label>Celular del capitán *</label>
+              <input type="tel" value={playerForm.celular} onChange={e => { const v = e.target.value.replace(/\D/g, ''); setPlayerForm({ ...playerForm, celular: v }); }} placeholder="5512345678" maxLength={10} />
             </div>
           )}
         </div>

@@ -80,6 +80,7 @@ export interface Player {
   curp: string | null;
   codigo_qr: string;
   usuario_id: number | null;
+  celular: string | null;
   email: string | null;
 }
 

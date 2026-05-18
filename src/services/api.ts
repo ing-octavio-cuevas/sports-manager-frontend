@@ -133,7 +133,7 @@ export const api = {
   getMiInformacion: () => get(`${BASE_URL}/jugadores/mi-informacion`),
 
   // Usuarios
-  createUsuario: (data: { email: string; password: string; nombre: string; roles: string[]; jugador_id: number }) => post(`${BASE_URL}/usuarios`, data),
+  createUsuario: (data: { celular: string; password: string; nombre: string; roles: string[]; jugador_id: number }) => post(`${BASE_URL}/usuarios`, data),
   async cambiarPassword(newPassword: string) {
     const res = await fetch(`${BASE_URL}/auth/cambiar-password`, {
       method: 'PUT',
