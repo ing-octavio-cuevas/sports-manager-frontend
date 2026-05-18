@@ -47,7 +47,7 @@ export default function ChangePassword() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-header">
-          <h1>🔒 Cambiar Contraseña</h1>
+          <h1>Cambiar Contraseña</h1>
           <p style={{ marginTop: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
             Hola {usuario?.nombre}, debes cambiar tu contraseña para continuar.
           </p>
