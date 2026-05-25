@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ClipboardList, AlertTriangle } from 'lucide-react';
 import { api, getFileUrl } from '@/services/api';
+import { formatDate } from '@/utils/dateUtils';
 import Modal from '@/components/ui/Modal';
 import type { Team, Player, Matchday, Partido, PartidoArbitraje } from '@/types';
 
@@ -56,7 +57,7 @@ export default function Standings() {
 
       // Obtener partidos y arbitrajes de jornadas terminadas
       const adeudosMap: Record<number, Adeudo[]> = {};
-      const equiposData = await api.getEquipos();
+      const equiposData = await api.getEquipos({ torneo_id: torneoId });
       const equipos = Array.isArray(equiposData) ? equiposData : [];
       setEquiposTorneo(equipos.filter((e: Team) => e.torneo_id === torneoId));
 
@@ -210,7 +211,7 @@ export default function Standings() {
             <div className="detail-grid" style={{ marginBottom: '1.5rem' }}>
               <p><strong>Inscripción:</strong> {viewTeam.inscripcion_pagada ? 'Pagada' : 'Pendiente'}</p>
               {viewTeam.monto_pagado !== null && <p><strong>Monto pagado:</strong> ${viewTeam.monto_pagado}</p>}
-              <p><strong>Fecha de creación:</strong> {new Date(viewTeam.fecha_creacion).toLocaleDateString()}</p>
+              <p><strong>Fecha de creación:</strong> {formatDate(viewTeam.fecha_creacion)}</p>
             </div>
 
             <h4 style={{ marginBottom: '0.75rem' }}>Jugadores ({teamPlayers.length})</h4>

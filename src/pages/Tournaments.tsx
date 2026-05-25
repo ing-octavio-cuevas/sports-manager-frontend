@@ -7,6 +7,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
 import type { Tournament, Ubicacion } from '@/types';
 import { api } from '@/services/api';
+import { formatDate } from '@/utils/dateUtils';
 
 interface TournamentForm {
   nombre: string;
@@ -396,8 +397,20 @@ export default function Tournaments() {
               <p><strong>Categoría:</strong> {viewTournament.categoria}</p>
               <p><strong>Publicado:</strong> {viewTournament.publicado ? 'Sí' : 'No'}</p>
               {viewTournament.fecha_creacion && (
-                <p><strong>Fecha de creación:</strong> {new Date(viewTournament.fecha_creacion).toLocaleDateString()}</p>
+                <p><strong>Fecha de creación:</strong> {formatDate(viewTournament.fecha_creacion)}</p>
               )}
+            </div>
+            <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--accent-light)', borderRadius: 'var(--radius-sm)' }}>
+              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Link público del torneo:</p>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <input
+                  readOnly
+                  value={`${window.location.origin}/torneo/${viewTournament.id}`}
+                  style={{ flex: 1, padding: '0.4rem 0.6rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', background: 'white' }}
+                  onClick={e => (e.target as HTMLInputElement).select()}
+                />
+                <button className="btn btn-sm btn-primary" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/torneo/${viewTournament.id}`); setToast({ message: 'Link copiado', type: 'success' }); }}>Copiar</button>
+              </div>
             </div>
             {viewTournament.reglamento && (
               <div style={{ marginTop: '1rem' }}>

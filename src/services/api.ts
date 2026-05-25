@@ -21,14 +21,22 @@ function authOnly(): Record<string, string> {
   return h;
 }
 
+function handleUnauthorized() {
+  localStorage.removeItem('voleibol_token');
+  localStorage.removeItem('voleibol_usuario');
+  window.location.href = '/login';
+}
+
 async function get(url: string) {
   const res = await fetch(url, { headers: authOnly() });
+  if (res.status === 401) { handleUnauthorized(); throw new Error('Sesión expirada'); }
   if (!res.ok) throw new Error(`Error ${res.status}`);
   return res.json();
 }
 
 async function post(url: string, data: unknown) {
   const res = await fetch(url, { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) });
+  if (res.status === 401) { handleUnauthorized(); throw new Error('Sesión expirada'); }
   if (!res.ok) {
     const err = await res.json().catch(() => null);
     throw new Error(err?.detail || `Error ${res.status}`);
@@ -38,12 +46,14 @@ async function post(url: string, data: unknown) {
 
 async function put(url: string, data: unknown) {
   const res = await fetch(url, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(data) });
+  if (res.status === 401) { handleUnauthorized(); throw new Error('Sesión expirada'); }
   if (!res.ok) throw new Error(`Error ${res.status}`);
   return res.json();
 }
 
 async function del(url: string) {
   const res = await fetch(url, { method: 'DELETE', headers: authOnly() });
+  if (res.status === 401) { handleUnauthorized(); throw new Error('Sesión expirada'); }
   if (!res.ok && res.status !== 204) {
     const err = await res.json().catch(() => null);
     throw new Error(err?.detail || `Error ${res.status}`);
@@ -65,7 +75,13 @@ export const api = {
   async deleteUbicacion(torneoId: number, ubicacionId: number) { await del(`${BASE_URL}/torneos/${torneoId}/ubicaciones/${ubicacionId}`); },
 
   // Equipos
-  getEquipos: () => get(`${BASE_URL}/equipos/`),
+  getEquipos: (params?: { anfitrion_id?: number; torneo_id?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.anfitrion_id) query.append('anfitrion_id', String(params.anfitrion_id));
+    if (params?.torneo_id) query.append('torneo_id', String(params.torneo_id));
+    const qs = query.toString();
+    return get(`${BASE_URL}/equipos/${qs ? '?' + qs : ''}`);
+  },
   getEquipo: (id: number) => get(`${BASE_URL}/equipos/${id}`),
   createEquipo: (data: any) => post(`${BASE_URL}/equipos/`, data),
   updateEquipo: (id: number, data: any) => put(`${BASE_URL}/equipos/${id}`, data),
@@ -131,6 +147,7 @@ export const api = {
 
   // Jugador - Mi información
   getMiInformacion: () => get(`${BASE_URL}/jugadores/mi-informacion`),
+  getMiCapitan: () => get(`${BASE_URL}/jugadores/mi-capitan`),
 
   // Usuarios
   createUsuario: (data: { celular: string; password: string; nombre: string; roles: string[]; jugador_id: number }) => post(`${BASE_URL}/usuarios`, data),

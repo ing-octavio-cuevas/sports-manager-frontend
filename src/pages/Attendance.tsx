@@ -6,20 +6,26 @@ import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
 import { api, getFileUrl } from '@/services/api';
+import { formatDate } from '@/utils/dateUtils';
 import { Html5Qrcode } from 'html5-qrcode';
 
 interface PartidoCapitan {
   id: number;
   torneo_id: number;
   jornada_id: number;
+  jornada_numero: number;
+  jornada_fecha: string;
   equipo_local_id: number;
   equipo_visitante_id: number;
   estatus: string | null;
   tipo: string | null;
   ubicacion_id: number | null;
+  ubicacion_nombre: string | null;
+  ubicacion_direccion: string | null;
   fecha_hora: string | null;
   es_hoy: boolean;
   caducado: boolean;
+  asistencia_registrada: boolean;
 }
 
 interface AsistenciaRegistro {
@@ -43,9 +49,6 @@ export default function Attendance() {
   const [partidos, setPartidos] = useState<PartidoCapitan[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPartido, setSelectedPartido] = useState<PartidoCapitan | null>(null);
-  const [partidosConAsistencia, setPartidosConAsistencia] = useState<Set<number>>(new Set());
-  const [jornadasMap, setJornadasMap] = useState<Record<number, { numero: number; fecha: string }>>({});
-  const [ubicacionesMap, setUbicacionesMap] = useState<Record<number, { nombre: string; ubicacion: string }>>({});
 
   // Asistencias registradas
   const [asistencias, setAsistencias] = useState<AsistenciaRegistro[]>([]);
@@ -64,22 +67,14 @@ export default function Attendance() {
   // Preview jugador escaneado
   const [previewJugador, setPreviewJugador] = useState<any | null>(null);
 
-  // Buscar el jugador asociado al usuario logueado
+  // Buscar el jugador capitán del usuario logueado
   useEffect(() => {
     const findCapitan = async () => {
       if (!usuario) return;
       try {
-        // Buscar en todos los equipos un jugador con usuario_id = usuario.id
-        const equipos = await api.getEquipos();
-        const equiposList = Array.isArray(equipos) ? equipos : [];
-        for (const equipo of equiposList) {
-          const jugadores = await api.getJugadores(equipo.id);
-          const jugadorList = Array.isArray(jugadores) ? jugadores : [];
-          const capitan = jugadorList.find((j: any) => j.usuario_id === usuario.id && j.es_capitan);
-          if (capitan) {
-            setCapitanId(capitan.id);
-            return;
-          }
+        const capitan = await api.getMiCapitan();
+        if (capitan && capitan.id) {
+          setCapitanId(capitan.id);
         }
       } catch { /* ignore */ }
     };
@@ -93,41 +88,6 @@ export default function Attendance() {
       const data = await api.getPartidosCapitan(capitanId);
       const list = Array.isArray(data) ? data : [];
       setPartidos(list);
-      // Verificar cuáles ya tienen asistencia
-      const conAsistencia = new Set<number>();
-      // Cargar jornadas para obtener fechas
-      const torneoIds = [...new Set(list.map((p: PartidoCapitan) => p.torneo_id))];
-      const jMap: Record<number, { numero: number; fecha: string }> = {};
-      await Promise.all([
-        ...list.map(async (p: PartidoCapitan) => {
-          try {
-            const estado = await api.getEstadoAsistencia(p.id);
-            // Verificar si mi capitán ya registró
-            if (estado.registrado_por_local === capitanId || estado.registrado_por_visitante === capitanId) {
-              conAsistencia.add(p.id);
-            }
-          } catch { /* ignore */ }
-        }),
-        ...torneoIds.map(async (torneoId: number) => {
-          try {
-            const jornadas = await api.getJornadas(torneoId);
-            if (Array.isArray(jornadas)) {
-              jornadas.forEach((j: any) => { jMap[j.id] = { numero: j.numero, fecha: j.fecha }; });
-            }
-          } catch { /* ignore */ }
-        }),
-      ]);
-      setPartidosConAsistencia(conAsistencia);
-      setJornadasMap(jMap);
-      // Cargar ubicaciones
-      const ubMap: Record<number, { nombre: string; ubicacion: string }> = {};
-      await Promise.all(torneoIds.map(async (tid: number) => {
-        try {
-          const ubs = await api.getUbicaciones(tid);
-          if (Array.isArray(ubs)) ubs.forEach((u: any) => { ubMap[u.id] = { nombre: u.nombre, ubicacion: u.ubicacion || '' }; });
-        } catch { /* ignore */ }
-      }));
-      setUbicacionesMap(ubMap);
     } catch (err) {
       console.error(err);
       setPartidos([]);
@@ -366,7 +326,7 @@ export default function Attendance() {
           </div>
           {(() => {
             const filtrados = partidos.filter(p => {
-              if (filtroAsistencia === 'hoy') return p.es_hoy;
+              if (filtroAsistencia === 'hoy') return p.es_hoy || (!p.caducado && p.asistencia_registrada);
               return p.caducado;
             });
             return filtrados.length === 0 ? (
@@ -377,20 +337,16 @@ export default function Attendance() {
             ) : (
               <div className="card-grid">
                 {filtrados.map(p => (
-              <div key={p.id} className="card" style={{ cursor: 'pointer', borderLeft: partidosConAsistencia.has(p.id) ? '4px solid var(--success)' : undefined }} onClick={() => openPartido(p)}>
+              <div key={p.id} className="card" style={{ cursor: 'pointer', borderLeft: p.asistencia_registrada ? '4px solid var(--success)' : undefined }} onClick={() => openPartido(p)}>
                 <h3 className="card-title">{getTeamName(p.equipo_local_id)} vs {getTeamName(p.equipo_visitante_id)}</h3>
                 <div className="card-details">
                   <p><strong>Torneo:</strong> {getTorneoName(p.torneo_id)}</p>
-                  <p><strong>Jornada:</strong> {jornadasMap[p.jornada_id]?.numero ? `Jornada ${jornadasMap[p.jornada_id].numero}` : '—'}</p>
-                  <p><strong>Fecha:</strong> {p.fecha_hora ? new Date(p.fecha_hora).toLocaleDateString() : jornadasMap[p.jornada_id]?.fecha ? new Date(jornadasMap[p.jornada_id].fecha).toLocaleDateString() : '—'}</p>
+                  <p><strong>Jornada:</strong> {p.jornada_numero ? `Jornada ${p.jornada_numero}` : '—'}</p>
+                  <p><strong>Fecha:</strong> {p.fecha_hora ? formatDate(p.fecha_hora) : p.jornada_fecha ? formatDate(p.jornada_fecha) : '—'}</p>
                   <p><strong>Hora:</strong> {p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
-                  <p><strong>Lugar:</strong> {p.ubicacion_id && ubicacionesMap[p.ubicacion_id] ? (
-                    ubicacionesMap[p.ubicacion_id].ubicacion
-                      ? <a href={ubicacionesMap[p.ubicacion_id].ubicacion} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{ubicacionesMap[p.ubicacion_id].nombre}</a>
-                      : ubicacionesMap[p.ubicacion_id].nombre
-                  ) : '—'}</p>
+                  <p><strong>Lugar:</strong> {p.ubicacion_nombre || '—'}</p>
                   <p><strong>Tipo:</strong> {p.tipo || '—'}</p>
-                  {partidosConAsistencia.has(p.id) && (
+                  {p.asistencia_registrada && (
                     <p style={{ color: 'var(--success)', fontWeight: 600 }}>✓ Asistencia registrada</p>
                   )}
                 </div>
@@ -410,13 +366,15 @@ export default function Attendance() {
             <h3 style={{ marginBottom: '0.5rem' }}>{getTeamName(selectedPartido.equipo_local_id)} vs {getTeamName(selectedPartido.equipo_visitante_id)}</h3>
             {miFinalizada ? (
               <p style={{ color: 'var(--success)', fontSize: '0.85rem', fontWeight: 600 }}>✓ Asistencia finalizada</p>
+            ) : selectedPartido.caducado ? (
+              <p style={{ color: 'var(--danger)', fontSize: '0.85rem', fontWeight: 600 }}>Este partido ya pasó, no se puede registrar asistencia.</p>
             ) : (
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Escanea o ingresa el código QR de cada jugador del equipo contrario.</p>
             )}
           </div>
 
-          {/* Registro - solo si no se ha finalizado */}
-          {!miFinalizada && (
+          {/* Registro - solo si no se ha finalizado y el partido es de hoy */}
+          {!miFinalizada && !selectedPartido.caducado && (
             <>
               <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
             <form onSubmit={handleManualSubmit} style={{ display: 'flex', gap: '0.5rem', flex: 1, minWidth: 250 }}>
@@ -435,7 +393,7 @@ export default function Attendance() {
           {jugadoresIds.length > 0 && (
             <div style={{ background: 'var(--accent-light)', borderRadius: 'var(--radius-sm)', padding: '1rem', marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <strong>{jugadoresIds.length} jugador(es) por registrar</strong>
+                <strong>{jugadoresIds.length} jugador(es) a registrar</strong>
                 <button className="btn btn-sm btn-primary" onClick={() => setConfirmFinalize(true)} disabled={saving}>
                   {saving ? 'Finalizando...' : 'Finalizar Asistencia'}
                 </button>
@@ -489,7 +447,7 @@ export default function Attendance() {
                             onClick={() => setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=256', nombre: j.nombre })}
                           />
                         </td>
-                        <td><strong>{j.nombre}</strong></td>
+                        <td><strong>{j.nombre}</strong>{j.es_capitan && <span style={{ fontSize: '0.7rem', verticalAlign: 'super', marginLeft: '2px' }}>⭐</span>}</td>
                         <td>{j.numero}</td>
                         <td>{asistencia ? new Date(asistencia.hora_registro).toLocaleTimeString() : '—'}</td>
                         <td>

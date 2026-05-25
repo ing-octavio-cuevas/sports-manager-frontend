@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { Plus, Edit, Trash2, Eye, Calendar, LayoutGrid, List } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Calendar, LayoutGrid, List, Share2 } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
 import type { Matchday, Partido, PartidoSet, CombinacionPendiente, PartidoArbitraje } from '@/types';
 import { api } from '@/services/api';
+import { formatDate } from '@/utils/dateUtils';
+import html2canvas from 'html2canvas';
 
 interface JornadaForm {
   numero: number;
@@ -90,7 +92,7 @@ export default function Matchdays() {
     try {
       const [jornadasData, equiposData, ubicacionesData] = await Promise.all([
         api.getJornadas(torneoId),
-        api.getEquipos(),
+        api.getEquipos({ torneo_id: torneoId }),
         api.getUbicaciones(torneoId),
       ]);
       setJornadas(Array.isArray(jornadasData) ? jornadasData : []);
@@ -439,6 +441,37 @@ export default function Matchdays() {
   const getTeamName = (id: number) => localTeams.find(t => t.id === id)?.nombre || `Equipo ${id}`;
   const getUbicacionName = (id: number | null) => id ? ubicaciones.find(u => u.id === id)?.nombre || '—' : '—';
 
+  // Compartir jornada como imagen
+  const flyerRef = useRef<HTMLDivElement>(null);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [sharingJornada, setSharingJornada] = useState<Matchday | null>(null);
+  const [sharePartidos, setSharePartidos] = useState<Partido[]>([]);
+
+  const openShareJornada = async (j: Matchday) => {
+    setSharingJornada(j);
+    try {
+      const data = await api.getPartidos(j.torneo_id, j.id);
+      setSharePartidos(Array.isArray(data) ? data : []);
+    } catch {
+      setSharePartidos([]);
+    }
+    setShareModalOpen(true);
+  };
+
+  const handleDownloadImage = async () => {
+    if (!flyerRef.current) return;
+    try {
+      const canvas = await html2canvas(flyerRef.current, { backgroundColor: '#ffffff', scale: 2 });
+      const link = document.createElement('a');
+      link.download = `jornada-${sharingJornada?.numero || ''}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (err) {
+      console.error(err);
+      setToast({ message: 'Error al generar imagen', type: 'error' });
+    }
+  };
+
   const getArbitrajePagado = (partidoId: number, equipoId: number) => {
     const arbs = partidosArbitrajes[partidoId] || [];
     const arb = arbs.find(a => a.equipo_id === equipoId);
@@ -485,7 +518,7 @@ export default function Matchdays() {
             <div key={j.id} className="card">
               <h3 className="card-title">Jornada {j.numero}</h3>
               <div className="card-details">
-                <p><strong>Fecha:</strong> {j.fecha ? new Date(j.fecha).toLocaleDateString() : '—'}</p>
+                <p><strong>Fecha:</strong> {j.fecha ? formatDate(j.fecha) : '—'}</p>
                 <p><strong>Estatus:</strong> <span className={`badge badge-${j.estatus ? 'active' : 'warning'}`}>{j.estatus ? 'Terminada' : 'Por Jugar'}</span></p>
               </div>
               <div className="card-actions">
@@ -515,7 +548,7 @@ export default function Matchdays() {
               {[...jornadas].sort((a, b) => a.id - b.id).map(j => (
                 <tr key={j.id}>
                   <td><strong>Jornada {j.numero}</strong></td>
-                  <td>{j.fecha ? new Date(j.fecha).toLocaleDateString() : '—'}</td>
+                  <td>{j.fecha ? formatDate(j.fecha) : '—'}</td>
                   <td><span className={`badge badge-${j.estatus ? 'active' : 'warning'}`}>{j.estatus ? 'Terminada' : 'Por Jugar'}</span></td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.25rem' }}>
@@ -562,8 +595,11 @@ export default function Matchdays() {
         ) : (
           <div>
             {isHost && (
-              <div style={{ marginBottom: '1rem' }}>
+              <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
                 <button className="btn btn-primary btn-sm" onClick={openCreatePartido}><Plus size={16} /> Agregar Partido</button>
+                {partidos.length > 0 && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => viewJornada && openShareJornada(viewJornada)}><Share2 size={16} /> Compartir</button>
+                )}
               </div>
             )}
             {partidos.length === 0 ? (
@@ -578,7 +614,7 @@ export default function Matchdays() {
                       <th></th>
                       <th>Pts</th>
                       <th>Visitante</th>
-                      <th>Hora</th>
+                      <th>Fecha/Hora</th>
                       <th>Tipo</th>
                       <th>Ubicación</th>
                       <th>Estatus</th>
@@ -595,7 +631,7 @@ export default function Matchdays() {
                         <td className="text-center" style={{ color: 'var(--text-secondary)' }}>|</td>
                         <td className="text-center" style={{ fontWeight: 700, color: '#8b5cf6' }}>{p.puntos_visitante}</td>
                         <td><strong>{getTeamName(p.equipo_visitante_id)}</strong></td>
-                        <td>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                        <td>{p.fecha_hora ? `${formatDate(p.fecha_hora)} ${new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '—'}</td>
                         <td>{p.tipo || '—'}</td>
                         <td>{p.ubicacion_id ? <button className="btn btn-sm btn-ghost" style={{ padding: 0, textDecoration: 'underline' }} onClick={() => { const u = ubicaciones.find(ub => ub.id === p.ubicacion_id); if (u) setViewUbicacion(u); }}>{getUbicacionName(p.ubicacion_id)}</button> : '—'}</td>
                         <td>{p.estatus || '—'}</td>
@@ -1015,6 +1051,46 @@ export default function Matchdays() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Share Jornada Modal */}
+      <Modal open={shareModalOpen} onClose={() => setShareModalOpen(false)} title="Compartir Jornada" wide>
+        <div ref={flyerRef} style={{ padding: '1.5rem', background: 'white', fontFamily: 'Inter, system-ui, sans-serif' }}>
+          <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#1e293b', marginBottom: '0.25rem' }}>
+              {tournaments.find(t => t.id === torneoId)?.nombre || 'Torneo'}
+            </h2>
+            <p style={{ fontSize: '1rem', fontWeight: 600, color: '#3b82f6' }}>Jornada {sharingJornada?.numero}</p>
+            {sharingJornada?.fecha && <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.25rem' }}>{formatDate(sharingJornada.fecha)}</p>}
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <thead>
+              <tr style={{ background: '#f1f5f9' }}>
+                <th style={{ padding: '0.5rem', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase' }}>Local</th>
+                <th style={{ padding: '0.5rem', textAlign: 'center', fontWeight: 700, color: '#64748b', fontSize: '0.75rem' }}>vs</th>
+                <th style={{ padding: '0.5rem', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase' }}>Visitante</th>
+                <th style={{ padding: '0.5rem', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase' }}>Fecha/Hora</th>
+                <th style={{ padding: '0.5rem', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase' }}>Lugar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sharePartidos.map(p => (
+                <tr key={p.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '0.5rem', fontWeight: 600 }}>{getTeamName(p.equipo_local_id)}</td>
+                  <td style={{ padding: '0.5rem', textAlign: 'center', color: '#64748b' }}>vs</td>
+                  <td style={{ padding: '0.5rem', fontWeight: 600 }}>{getTeamName(p.equipo_visitante_id)}</td>
+                  <td style={{ padding: '0.5rem', color: '#64748b' }}>{p.fecha_hora ? `${formatDate(p.fecha_hora)} ${new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '—'}</td>
+                  <td style={{ padding: '0.5rem', color: '#64748b' }}>{getUbicacionName(p.ubicacion_id)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.7rem', color: '#94a3b8' }}>Sports Manager</p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={() => setShareModalOpen(false)}>Cerrar</button>
+          <button className="btn btn-primary" onClick={handleDownloadImage}><Share2 size={16} /> Descargar imagen</button>
+        </div>
       </Modal>
 
       <ConfirmDialog open={!!deleteId} message="¿Eliminar esta jornada?" onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />

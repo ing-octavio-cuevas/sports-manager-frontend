@@ -7,6 +7,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
 import type { Team, Player } from '@/types';
 import { api, getFileUrl } from '@/services/api';
+import { formatDate } from '@/utils/dateUtils';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface TeamForm {
@@ -89,7 +90,7 @@ export default function Teams() {
   const fetchTeams = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await api.getEquipos();
+      const data = await api.getEquipos(usuario?.anfitrion_id ? { anfitrion_id: usuario.anfitrion_id } : undefined);
       setTeams(data);
       setError(null);
       // Cargar conteo de jugadores por equipo
@@ -530,8 +531,8 @@ export default function Teams() {
             <p><strong>Estatus:</strong> {viewTeam.estatus ? 'Activo' : 'Inactivo'}</p>
             <p><strong>Inscripción:</strong> {viewTeam.inscripcion_pagada ? 'Pagada' : 'Pendiente'}</p>
             {viewTeam.monto_pagado !== null && <p><strong>Monto pagado:</strong> ${viewTeam.monto_pagado}</p>}
-            {viewTeam.fecha_pago_inscripcion && <p><strong>Fecha de pago:</strong> {new Date(viewTeam.fecha_pago_inscripcion).toLocaleDateString()}</p>}
-            <p><strong>Fecha de creación:</strong> {new Date(viewTeam.fecha_creacion).toLocaleDateString()}</p>
+            {viewTeam.fecha_pago_inscripcion && <p><strong>Fecha de pago:</strong> {formatDate(viewTeam.fecha_pago_inscripcion)}</p>}
+            <p><strong>Fecha de creación:</strong> {formatDate(viewTeam.fecha_creacion)}</p>
           </div>
         )}
       </Modal>
@@ -631,6 +632,8 @@ export default function Teams() {
                 }
               }}
               placeholder="Ej: 10"
+              disabled={!!editingPlayer}
+              style={editingPlayer ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined}
             />
           </div>
           <div className="form-group">

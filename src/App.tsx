@@ -12,6 +12,7 @@ import Results from '@/pages/Results';
 import Standings from '@/pages/Standings';
 import Attendance from '@/pages/Attendance';
 import MyInfo from '@/pages/MyInfo';
+import TorneoPublico from '@/pages/TorneoPublico';
 
 function DefaultRedirect() {
   const { usuario } = useAuth();
@@ -51,6 +52,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/cambiar-password" element={<ChangePassword />} />
+          <Route path="/torneo/:id" element={<TorneoPublico />} />
           <Route path="/*" element={<ProtectedRoutes />} />
         </Routes>
       </BrowserRouter>

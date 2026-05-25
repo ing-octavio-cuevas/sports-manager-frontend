@@ -516,6 +516,14 @@ body {
 }
 
 /* ===== PLAYER PHOTOS ===== */
+.player-photo,
+img[style*="cursor: pointer"] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
 .player-photo {
   width: 36px;
   height: 36px;
@@ -813,6 +821,24 @@ body {
 @media (max-width: 480px) {
   .page-header { flex-direction: column; align-items: flex-start; }
   .page-header .btn { width: 100%; justify-content: center; }
+}
+
+/* ===== PARTIDOS RESPONSIVE ===== */
+.partidos-cards-mobile { display: none; }
+.partidos-table-desktop { display: block; }
+
+@media (max-width: 768px) {
+  .partidos-cards-mobile { display: flex; flex-direction: column; gap: 0.75rem; }
+  .partidos-table-desktop { display: none; }
+}
+
+/* ===== PUBLIC PAGE ===== */
+.public-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  min-height: 100vh;
+  background: var(--bg);
 }
 
 /* ===== TOAST ===== */
@@ -1152,7 +1178,7 @@ body {
   .login-page {
     justify-content: center;
     align-items: center;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    background: linear-gradient(135deg, #0a2540 0%, #1565a8 35%, #1a85d4 60%, #29a8e8 85%, #d6f0ff 100%);
     padding: 2rem;
     position: relative;
     overflow: hidden;
@@ -1166,7 +1192,7 @@ body {
     top: -60px;
     width: 350px;
     height: 350px;
-    background: linear-gradient(135deg, rgba(15, 52, 96, 0.8) 0%, rgba(30, 64, 120, 0.4) 100%);
+    background: linear-gradient(135deg, rgba(44, 62, 80, 0.7) 0%, rgba(30, 136, 229, 0.3) 100%);
     clip-path: polygon(0 0, 100% 0, 60% 100%, 0 80%);
     z-index: 0;
   }
@@ -1178,7 +1204,7 @@ body {
     bottom: -80px;
     width: 400px;
     height: 400px;
-    background: linear-gradient(135deg, rgba(30, 64, 120, 0.5) 0%, rgba(15, 52, 96, 0.3) 100%);
+    background: linear-gradient(135deg, rgba(30, 136, 229, 0.4) 0%, rgba(44, 62, 80, 0.2) 100%);
     clip-path: polygon(40% 0, 100% 20%, 100% 100%, 0 100%);
     z-index: 0;
   }
@@ -1265,9 +1291,9 @@ body {
     left: -320px;
     top: -60px;
     font-size: 10rem;
-    opacity: 0.12;
+    opacity: 0.2;
     transform: rotate(-15deg);
-    filter: drop-shadow(0 12px 30px rgba(0,0,0,0.4)) grayscale(0.5);
+    filter: drop-shadow(0 12px 30px rgba(0,0,0,0.5));
   }
 
   .login-page .login-brand-desktop::after {
@@ -1276,9 +1302,9 @@ body {
     right: -320px;
     top: 0px;
     font-size: 9rem;
-    opacity: 0.12;
+    opacity: 0.2;
     transform: rotate(20deg);
-    filter: drop-shadow(0 12px 30px rgba(0,0,0,0.4)) grayscale(0.5);
+    filter: drop-shadow(0 12px 30px rgba(0,0,0,0.5));
   }
 
   .login-card::before {
@@ -1287,9 +1313,9 @@ body {
     left: -240px;
     bottom: -40px;
     font-size: 8rem;
-    opacity: 0.1;
+    opacity: 0.18;
     transform: rotate(25deg);
-    filter: drop-shadow(0 10px 25px rgba(0,0,0,0.35)) grayscale(0.5);
+    filter: drop-shadow(0 10px 25px rgba(0,0,0,0.4));
     z-index: -1;
   }
 
@@ -1299,9 +1325,9 @@ body {
     right: -220px;
     bottom: 10px;
     font-size: 7rem;
-    opacity: 0.1;
+    opacity: 0.18;
     transform: rotate(-10deg);
-    filter: drop-shadow(0 10px 25px rgba(0,0,0,0.35)) grayscale(0.5);
+    filter: drop-shadow(0 10px 25px rgba(0,0,0,0.4));
     z-index: -1;
   }
 
@@ -1319,9 +1345,9 @@ body {
     left: 5%;
     top: 12%;
     font-size: 7rem;
-    opacity: 0.08;
+    opacity: 0.15;
     transform: rotate(30deg);
-    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.3)) grayscale(0.5);
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.4));
   }
 
   .login-page .login-top-bg-extra::after {
@@ -1330,9 +1356,9 @@ body {
     right: 6%;
     top: 10%;
     font-size: 6.5rem;
-    opacity: 0.08;
+    opacity: 0.15;
     transform: rotate(-15deg);
-    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.3)) grayscale(0.5);
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.4));
   }
 
   .login-bg-balls {
@@ -1349,9 +1375,9 @@ body {
     left: 8%;
     bottom: 15%;
     font-size: 6rem;
-    opacity: 0.08;
+    opacity: 0.15;
     transform: rotate(20deg);
-    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.3)) grayscale(0.5);
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.4));
   }
 
   .login-bg-balls::after {
@@ -1360,9 +1386,9 @@ body {
     right: 8%;
     bottom: 18%;
     font-size: 6.5rem;
-    opacity: 0.08;
+    opacity: 0.15;
     transform: rotate(-25deg);
-    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.3)) grayscale(0.5);
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.4));
   }
 
   .login-bg-balls-extra {
@@ -1379,9 +1405,9 @@ body {
     left: 18%;
     top: 60%;
     font-size: 5.5rem;
-    opacity: 0.06;
+    opacity: 0.12;
     transform: rotate(10deg);
-    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.3)) grayscale(0.5);
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.4));
   }
 
   .login-bg-balls-extra::after {
@@ -1390,8 +1416,8 @@ body {
     right: 18%;
     top: 65%;
     font-size: 5rem;
-    opacity: 0.06;
+    opacity: 0.12;
     transform: rotate(-8deg);
-    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.3)) grayscale(0.5);
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.4));
   }
 }

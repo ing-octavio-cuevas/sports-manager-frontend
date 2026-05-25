@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Trophy, Users, Calendar, ClipboardList, QrCode, LayoutGrid, List, Upload } from 'lucide-react';
 import { api, getFileUrl } from '@/services/api';
+import { formatDate } from '@/utils/dateUtils';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import type { PartidoSet, PartidoArbitraje } from '@/types';
@@ -369,55 +370,102 @@ export default function MyInfo() {
           {selectedTorneo.partidos.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)' }}>No hay partidos programados.</p>
           ) : (
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Jornada</th>
-                    <th>Local</th>
-                    <th></th>
-                    <th>Visitante</th>
-                    <th>Fecha</th>
-                    <th>Hora</th>
-                    <th>Lugar</th>
-                    <th>Tipo</th>
-                    <th>Estatus</th>
-                    <th title="Arbitraje pagado">💰</th>
-                    <th>Rival</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedTorneo.partidos.map(p => (
-                    <tr key={p.id} style={{ background: p.estatus === 'Jugado' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)', cursor: 'pointer' }} onClick={() => openPartidoDetail(p)}>
-                      <td>J{p.jornada_id}</td>
-                      <td><strong>{equiposMap[p.equipo_local_id] || `Eq. ${p.equipo_local_id}`}</strong></td>
-                      <td className="text-center" style={{ fontWeight: 700 }}>{p.puntos_local} | {p.puntos_visitante}</td>
-                      <td><strong>{equiposMap[p.equipo_visitante_id] || `Eq. ${p.equipo_visitante_id}`}</strong></td>
-                      <td>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleDateString() : '—'}</td>
-                      <td>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                      <td>{p.ubicacion_id && ubicacionesMap[p.ubicacion_id] ? <button className="btn btn-sm btn-ghost" style={{ padding: 0, textDecoration: 'underline' }} onClick={(e) => { e.stopPropagation(); setViewUbicacion(ubicacionesMap[p.ubicacion_id!]); }}>{ubicacionesMap[p.ubicacion_id].nombre}</button> : '—'}</td>
-                      <td>{p.tipo}</td>
-                      <td><span className={`badge badge-${p.estatus === 'Jugado' ? 'active' : 'warning'}`}>{p.estatus}</span></td>
-                      <td className="text-center">
-                        {(() => {
+            <>
+              {/* Vista cards para móvil */}
+              <div className="partidos-cards-mobile">
+                {selectedTorneo.partidos.map(p => (
+                  <div key={p.id} className="card" style={{ padding: '1rem', cursor: 'pointer', background: p.estatus === 'Jugado' ? 'rgba(16, 185, 129, 0.05)' : 'rgba(245, 158, 11, 0.05)' }} onClick={() => openPartidoDetail(p)}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>J{p.jornada_id}</span>
+                      <span className={`badge badge-${p.estatus === 'Jugado' ? 'active' : 'warning'}`}>{p.estatus}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '0.5rem', alignItems: 'center', textAlign: 'center', marginBottom: '0.75rem' }}>
+                      <div>
+                        <p style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--accent)' }}>{equiposMap[p.equipo_local_id] || `Eq. ${p.equipo_local_id}`}</p>
+                        <p style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent)' }}>{p.puntos_local}</p>
+                      </div>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>vs</span>
+                      <div>
+                        <p style={{ fontWeight: 700, fontSize: '0.85rem', color: '#8b5cf6' }}>{equiposMap[p.equipo_visitante_id] || `Eq. ${p.equipo_visitante_id}`}</p>
+                        <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#8b5cf6' }}>{p.puntos_visitante}</p>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      <span>📅 {p.fecha_hora ? formatDate(p.fecha_hora) : '—'}</span>
+                      <span>🕐 {p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                      {p.ubicacion_id && ubicacionesMap[p.ubicacion_id] && <span>📍 {ubicacionesMap[p.ubicacion_id].nombre}</span>}
+                      <span>🏷️ {p.tipo || '—'}</span>
+                      <span>
+                        💰 {(() => {
                           const arbs = partidosArbMap[p.id] || [];
                           const miArb = arbs.find(a => a.equipo_id === selectedTorneo.equipo_id);
-                          if (!miArb) return <span style={{ color: 'var(--text-secondary)' }}>—</span>;
-                          return miArb.pagado
-                            ? <span style={{ color: 'var(--success)' }}>✓</span>
-                            : <span style={{ color: 'var(--danger)' }}>✗</span>;
+                          if (!miArb) return '—';
+                          return miArb.pagado ? '✓' : '✗';
                         })()}
-                      </td>
-                      <td className="text-center">
-                        <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); openEquipoContrario(p); }} title="Ver equipo rival">
-                          <Users size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                      <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); openEquipoContrario(p); }} title="Ver equipo rival">
+                        <Users size={14} /> Rival
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Vista tabla para desktop */}
+              <div className="partidos-table-desktop">
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Jornada</th>
+                        <th>Local</th>
+                        <th></th>
+                        <th>Visitante</th>
+                        <th>Fecha</th>
+                        <th>Hora</th>
+                        <th>Lugar</th>
+                        <th>Tipo</th>
+                        <th>Estatus</th>
+                        <th title="Arbitraje pagado">💰</th>
+                        <th>Rival</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedTorneo.partidos.map(p => (
+                        <tr key={p.id} style={{ background: p.estatus === 'Jugado' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)', cursor: 'pointer' }} onClick={() => openPartidoDetail(p)}>
+                          <td>J{p.jornada_id}</td>
+                          <td><strong>{equiposMap[p.equipo_local_id] || `Eq. ${p.equipo_local_id}`}</strong></td>
+                          <td className="text-center" style={{ fontWeight: 700 }}>{p.puntos_local} | {p.puntos_visitante}</td>
+                          <td><strong>{equiposMap[p.equipo_visitante_id] || `Eq. ${p.equipo_visitante_id}`}</strong></td>
+                          <td>{p.fecha_hora ? formatDate(p.fecha_hora) : '—'}</td>
+                          <td>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                          <td>{p.ubicacion_id && ubicacionesMap[p.ubicacion_id] ? <button className="btn btn-sm btn-ghost" style={{ padding: 0, textDecoration: 'underline' }} onClick={(e) => { e.stopPropagation(); setViewUbicacion(ubicacionesMap[p.ubicacion_id!]); }}>{ubicacionesMap[p.ubicacion_id].nombre}</button> : '—'}</td>
+                          <td>{p.tipo}</td>
+                          <td><span className={`badge badge-${p.estatus === 'Jugado' ? 'active' : 'warning'}`}>{p.estatus}</span></td>
+                          <td className="text-center">
+                            {(() => {
+                              const arbs = partidosArbMap[p.id] || [];
+                              const miArb = arbs.find(a => a.equipo_id === selectedTorneo.equipo_id);
+                              if (!miArb) return <span style={{ color: 'var(--text-secondary)' }}>—</span>;
+                              return miArb.pagado
+                                ? <span style={{ color: 'var(--success)' }}>✓</span>
+                                : <span style={{ color: 'var(--danger)' }}>✗</span>;
+                            })()}
+                          </td>
+                          <td className="text-center">
+                            <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); openEquipoContrario(p); }} title="Ver equipo rival">
+                              <Users size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
           )}
         </div>
       )}
@@ -437,7 +485,7 @@ export default function MyInfo() {
               </div>
               <div className="form-group">
                 <label>Número</label>
-                <input type="text" inputMode="numeric" value={jugadorForm.numero || ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setJugadorForm({ ...jugadorForm, numero: e.target.value === '' ? 0 : Number(e.target.value) }); }} />
+                <input type="text" inputMode="numeric" value={jugadorForm.numero || ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setJugadorForm({ ...jugadorForm, numero: e.target.value === '' ? 0 : Number(e.target.value) }); }} disabled={editingJugador !== 'new'} style={editingJugador !== 'new' ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
               </div>
               <div className="form-group">
                 <label>Posición</label>
