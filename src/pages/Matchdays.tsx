@@ -32,7 +32,7 @@ const emptyJornadaForm: JornadaForm = { numero: 1, fecha: '', estatus: false };
 const emptyPartidoForm: PartidoForm = {
   equipo_local_id: 0, equipo_visitante_id: 0,
   puntos_local: 0, puntos_visitante: 0,
-  ubicacion_id: 0, fecha_hora: '', estatus: 'Por jugar', tipo: 'Oficial', observaciones: '',
+  ubicacion_id: 0, fecha_hora: '', estatus: 'Por jugar', tipo: '', observaciones: '',
 };
 
 export default function Matchdays() {
@@ -164,16 +164,11 @@ export default function Matchdays() {
       const data = await api.getPartidos(j.torneo_id, j.id);
       const list = Array.isArray(data) ? data : [];
       setPartidos(list);
-      // Cargar arbitrajes de cada partido
+      // Usar arbitrajes incluidos en cada partido
       const arbMap: Record<number, PartidoArbitraje[]> = {};
-      await Promise.all(
-        list.map(async (p: Partido) => {
-          try {
-            const arbs = await api.getArbitrajes(p.id);
-            arbMap[p.id] = Array.isArray(arbs) ? arbs : [];
-          } catch { arbMap[p.id] = []; }
-        })
-      );
+      list.forEach((p: any) => {
+        arbMap[p.id] = Array.isArray(p.arbitrajes) ? p.arbitrajes : [];
+      });
       setPartidosArbitrajes(arbMap);
     } catch (err) {
       console.error(err);
@@ -189,16 +184,11 @@ export default function Matchdays() {
       const data = await api.getPartidos(viewJornada.torneo_id, viewJornada.id);
       const list = Array.isArray(data) ? data : [];
       setPartidos(list);
-      // Recargar arbitrajes
+      // Usar arbitrajes incluidos en cada partido
       const arbMap: Record<number, PartidoArbitraje[]> = {};
-      await Promise.all(
-        list.map(async (p: Partido) => {
-          try {
-            const arbs = await api.getArbitrajes(p.id);
-            arbMap[p.id] = Array.isArray(arbs) ? arbs : [];
-          } catch { arbMap[p.id] = []; }
-        })
-      );
+      list.forEach((p: any) => {
+        arbMap[p.id] = Array.isArray(p.arbitrajes) ? p.arbitrajes : [];
+      });
       setPartidosArbitrajes(arbMap);
     } catch { setPartidos([]); }
   };
@@ -231,25 +221,14 @@ export default function Matchdays() {
       observaciones: p.observaciones || '',
     });
     setPartidoModalOpen(true);
-    // Cargar sets
-    setLoadingSets(true);
-    try {
-      const [setsData, arbitrajesData] = await Promise.all([
-        api.getSets(p.id),
-        api.getArbitrajes(p.id),
-      ]);
-      const list = Array.isArray(setsData) ? setsData : [];
-      setSets(list);
-      setLocalSets(list.map(s => ({ id: s.id, marcador_local: s.marcador_local, marcador_visitante: s.marcador_visitante })));
-      const arbList = Array.isArray(arbitrajesData) ? arbitrajesData : [];
-      setLocalArbitrajes(arbList.map(a => ({ ...a })));
-    } catch {
-      setSets([]);
-      setLocalSets([]);
-      setLocalArbitrajes([]);
-    } finally {
-      setLoadingSets(false);
-    }
+    // Usar sets y arbitrajes incluidos en el partido
+    const pAny = p as any;
+    const setsFromPartido = Array.isArray(pAny.sets) ? pAny.sets : [];
+    const arbsFromPartido = Array.isArray(pAny.arbitrajes) ? pAny.arbitrajes : [];
+    setSets(setsFromPartido);
+    setLocalSets(setsFromPartido.map((s: any) => ({ id: s.id, marcador_local: s.marcador_local, marcador_visitante: s.marcador_visitante })));
+    setLocalArbitrajes(arbsFromPartido.map((a: any) => ({ ...a })));
+    setLoadingSets(false);
   };
 
   const openCreatePartido = () => {
@@ -728,6 +707,7 @@ export default function Matchdays() {
           <div className="form-group">
             <label>Tipo</label>
             <select value={partidoForm.tipo} onChange={e => setPartidoForm({ ...partidoForm, tipo: e.target.value })}>
+              <option value="">Seleccionar...</option>
               <option value="Oficial">Oficial</option>
               <option value="Amistoso">Amistoso</option>
             </select>

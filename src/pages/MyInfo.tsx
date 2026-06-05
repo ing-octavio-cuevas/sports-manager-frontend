@@ -4,6 +4,7 @@ import { api, getFileUrl } from '@/services/api';
 import { formatDate } from '@/utils/dateUtils';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import Toast from '@/components/ui/Toast';
 import type { PartidoSet, PartidoArbitraje } from '@/types';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -23,6 +24,9 @@ interface PartidoInfo {
 interface TorneoInfo {
   torneo_id: number;
   torneo_nombre: string;
+  torneo_logo: string | null;
+  torneo_reglamento: string | null;
+  torneo_publicado: boolean;
   equipo_id: number;
   equipo_nombre: string;
   jugador_id: number;
@@ -54,7 +58,7 @@ export default function MyInfo() {
 
   // Tabla de posiciones
   const [showStandings, setShowStandings] = useState(false);
-  const [standings, setStandings] = useState<{ equipo_id: number; equipo_nombre: string; pj: number; pg: number; pp: number; sg: number; sp: number; pts: number }[]>([]);
+  const [standings, setStandings] = useState<{ equipo_id: number; equipo_nombre: string; equipo_logo: string | null; pj: number; pg: number; pp: number; sg: number; sp: number; pts: number }[]>([]);
   const [loadingStandings, setLoadingStandings] = useState(false);
 
   // Arbitrajes de partidos
@@ -144,6 +148,12 @@ export default function MyInfo() {
     setShowMiEquipo(true);
     setLoadingMiEquipo(true);
     try {
+      const equipoData = await api.getEquipo(equipoId);
+      setLocalTeamLogo(equipoData?.logo || null);
+    } catch {
+      setLocalTeamLogo(null);
+    }
+    try {
       const [data, resumen] = await Promise.all([
         api.getJugadores(equipoId),
         selectedTorneo ? api.getResumenAsistencia(equipoId, selectedTorneo.torneo_id) : Promise.resolve(null),
@@ -179,6 +189,8 @@ export default function MyInfo() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingPhotoId, setUploadingPhotoId] = useState<number | null>(null);
   const [viewPhoto, setViewPhoto] = useState<{ url: string; nombre: string } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [localTeamLogo, setLocalTeamLogo] = useState<string | null>(null);
 
   const handleDeleteJugador = async () => {
     if (!selectedTorneo || deleteJugadorId === null) return;
@@ -307,7 +319,7 @@ export default function MyInfo() {
         </div>
       ) : !selectedTorneo ? (
         <div className="card-grid">
-          {[...info.torneos].filter((t, i, arr) => arr.findIndex(x => x.torneo_id === t.torneo_id) === i).sort((a, b) => a.torneo_id - b.torneo_id).map(t => (
+          {[...info.torneos].filter((t, i, arr) => t.torneo_publicado && arr.findIndex(x => x.torneo_id === t.torneo_id) === i).sort((a, b) => a.torneo_id - b.torneo_id).map(t => (
             <div key={t.torneo_id} className="card" style={{ cursor: 'pointer' }} onClick={async () => {
               setSelectedTorneo(t);
               // Cargar arbitrajes de los partidos
@@ -322,7 +334,7 @@ export default function MyInfo() {
             }}>
               <div className="card-header-row">
                 <img
-                  src={'https://ui-avatars.com/api/?name=' + encodeURIComponent(t.torneo_nombre) + '&background=3b82f6&color=fff&size=48'}
+                  src={t.torneo_logo || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(t.torneo_nombre) + '&background=3b82f6&color=fff&size=48'}
                   alt="" className="card-logo"
                 />
                 <div>
@@ -360,6 +372,11 @@ export default function MyInfo() {
               <button className="btn btn-sm btn-secondary" onClick={() => openMiEquipo(selectedTorneo.equipo_id)}>
                 <Users size={16} /> Mi Equipo
               </button>
+              {selectedTorneo.torneo_reglamento && (
+                <a href={selectedTorneo.torneo_reglamento} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-secondary" style={{ textDecoration: 'none' }}>
+                  📄 Reglamento
+                </a>
+              )}
             </div>
           </div>
 
@@ -373,7 +390,7 @@ export default function MyInfo() {
             <>
               {/* Vista cards para móvil */}
               <div className="partidos-cards-mobile">
-                {selectedTorneo.partidos.map(p => (
+                {[...selectedTorneo.partidos].sort((a, b) => (b.fecha_hora || '').localeCompare(a.fecha_hora || '')).map(p => (
                   <div key={p.id} className="card" style={{ padding: '1rem', cursor: 'pointer', background: p.estatus === 'Jugado' ? 'rgba(16, 185, 129, 0.05)' : 'rgba(245, 158, 11, 0.05)' }} onClick={() => openPartidoDetail(p)}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>J{p.jornada_id}</span>
@@ -393,7 +410,7 @@ export default function MyInfo() {
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       <span>📅 {p.fecha_hora ? formatDate(p.fecha_hora) : '—'}</span>
                       <span>🕐 {p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                      {p.ubicacion_id && ubicacionesMap[p.ubicacion_id] && <span>📍 {ubicacionesMap[p.ubicacion_id].nombre}</span>}
+                      {p.ubicacion_id && ubicacionesMap[p.ubicacion_id] && <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={(e) => { e.stopPropagation(); setViewUbicacion(ubicacionesMap[p.ubicacion_id!]); }}>📍 {ubicacionesMap[p.ubicacion_id].nombre}</span>}
                       <span>🏷️ {p.tipo || '—'}</span>
                       <span>
                         💰 {(() => {
@@ -433,7 +450,7 @@ export default function MyInfo() {
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedTorneo.partidos.map(p => (
+                      {[...selectedTorneo.partidos].sort((a, b) => (b.fecha_hora || '').localeCompare(a.fecha_hora || '')).map(p => (
                         <tr key={p.id} style={{ background: p.estatus === 'Jugado' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)', cursor: 'pointer' }} onClick={() => openPartidoDetail(p)}>
                           <td>J{p.jornada_id}</td>
                           <td><strong>{equiposMap[p.equipo_local_id] || `Eq. ${p.equipo_local_id}`}</strong></td>
@@ -485,10 +502,10 @@ export default function MyInfo() {
               </div>
               <div className="form-group">
                 <label>Número</label>
-                <input type="text" inputMode="numeric" value={jugadorForm.numero || ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setJugadorForm({ ...jugadorForm, numero: e.target.value === '' ? 0 : Number(e.target.value) }); }} disabled={editingJugador !== 'new'} style={editingJugador !== 'new' ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
+                <input type="text" inputMode="numeric" value={jugadorForm.numero || ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setJugadorForm({ ...jugadorForm, numero: e.target.value === '' ? 0 : Number(e.target.value) }); }} disabled={editingJugador !== 'new' && !!editingJugador?.numero} style={editingJugador !== 'new' && editingJugador?.numero ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
               </div>
               <div className="form-group">
-                <label>Posición</label>
+                <label>Posición (opcional)</label>
                 <select value={jugadorForm.posicion} onChange={e => setJugadorForm({ ...jugadorForm, posicion: e.target.value })}>
                   <option value="">Seleccionar...</option>
                   <option value="Setter">Setter</option>
@@ -500,7 +517,7 @@ export default function MyInfo() {
                 </select>
               </div>
               <div className="form-group">
-                <label>CURP</label>
+                <label>CURP (opcional)</label>
                 <input value={jugadorForm.curp} onChange={e => setJugadorForm({ ...jugadorForm, curp: e.target.value.slice(0, 18).toUpperCase() })} maxLength={18} />
               </div>
             </div>
@@ -511,6 +528,30 @@ export default function MyInfo() {
           </div>
         ) : (
           <div>
+            {/* Logo del equipo - solo capitán */}
+            {selectedTorneo?.es_capitan && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+                <img
+                  src={localTeamLogo || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(selectedTorneo?.equipo_nombre || '') + '&background=3b82f6&color=fff&size=48'}
+                  alt=""
+                  style={{ width: 48, height: 48, borderRadius: 'var(--radius-sm)', objectFit: 'cover', border: '1px solid var(--border)' }}
+                />
+                <label className="btn btn-sm btn-secondary" style={{ cursor: 'pointer' }}>
+                  📷 {localTeamLogo ? 'Cambiar Logo' : 'Subir Logo'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !selectedTorneo) return;
+                    try {
+                      await api.uploadEquipoLogo(selectedTorneo.equipo_id, file);
+                      const equipoData = await api.getEquipo(selectedTorneo.equipo_id);
+                      setLocalTeamLogo((equipoData?.logo || '') + '?t=' + Date.now());
+                      setToast({ message: 'Logo actualizado', type: 'success' });
+                    } catch { setToast({ message: 'Error al subir logo', type: 'error' }); }
+                    e.target.value = '';
+                  }} />
+                </label>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               {selectedTorneo?.es_capitan ? (
                 <button className="btn btn-primary btn-sm" onClick={() => { setEditingJugador('new'); setJugadorForm({ nombre: '', numero: 0, posicion: '', estatus: true, curp: '' }); }}>
@@ -648,40 +689,73 @@ export default function MyInfo() {
         ) : standings.length === 0 ? (
           <p style={{ color: 'var(--text-secondary)' }}>No hay datos de posiciones.</p>
         ) : (
-          <div className="table-wrapper">
-            <table className="data-table standings-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Equipo</th>
-                  <th>PJ</th>
-                  <th>PG</th>
-                  <th>PP</th>
-                  <th>SG</th>
-                  <th>SP</th>
-                  <th>Pts</th>
-                </tr>
-              </thead>
-              <tbody>
-                {standings.map((row, i) => (
-                  <tr key={row.equipo_id} className={i < 3 ? 'top-row' : ''} style={{ background: row.equipo_id === selectedTorneo?.equipo_id ? 'var(--accent-light)' : undefined }}>
-                    <td className="rank">{i + 1}</td>
-                    <td className="team-cell"><strong>{row.equipo_nombre}</strong> {row.equipo_id === selectedTorneo?.equipo_id && <span style={{ fontSize: '0.7rem', color: 'var(--accent)' }}>(tú)</span>}</td>
-                    <td>{row.pj}</td>
-                    <td>{row.pg}</td>
-                    <td>{row.pp}</td>
-                    <td>{row.sg}</td>
-                    <td>{row.sp}</td>
-                    <td className="points-cell"><strong>{row.pts}</strong></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="standings-legend">
-              <p><strong>PJ</strong> = Partidos Jugados · <strong>PG</strong> = Ganados · <strong>PP</strong> = Perdidos</p>
-              <p><strong>SG</strong> = Sets Ganados · <strong>SP</strong> = Sets Perdidos · <strong>Pts</strong> = Puntos</p>
+          <>
+            {/* Vista compacta para móvil */}
+            <div className="standings-mobile">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                <span style={{ width: '1.5rem' }}>#</span>
+                <span style={{ flex: 1 }}>Equipo</span>
+                <span style={{ width: '2rem', textAlign: 'center' }}>PJ</span>
+                <span style={{ width: '2rem', textAlign: 'center' }}>PG</span>
+                <span style={{ width: '2rem', textAlign: 'center' }}>PP</span>
+                <span style={{ width: '2.5rem', textAlign: 'center' }}>Pts</span>
+              </div>
+              {standings.map((row, i) => (
+                <div key={row.equipo_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: row.equipo_id === selectedTorneo?.equipo_id ? 'var(--accent-light)' : i % 2 === 0 ? 'var(--bg)' : 'white', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem' }}>
+                  <span style={{ fontWeight: 800, color: 'var(--accent)', width: '1.5rem', textAlign: 'center' }}>{i + 1}</span>
+                  <img src={getFileUrl(row.equipo_logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(row.equipo_nombre) + '&background=6366f1&color=fff&size=22'} alt="" style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => row.equipo_logo && setViewPhoto({ url: getFileUrl(row.equipo_logo)!, nombre: row.equipo_nombre })} />
+                  <span style={{ flex: 1, fontWeight: 600, marginLeft: '0.4rem' }}>{row.equipo_nombre}{row.equipo_id === selectedTorneo?.equipo_id && <span style={{ fontSize: '0.6rem', color: 'var(--accent)', marginLeft: '0.2rem' }}>(tú)</span>}</span>
+                  <span style={{ width: '2rem', textAlign: 'center' }}>{row.pj}</span>
+                  <span style={{ width: '2rem', textAlign: 'center' }}>{row.pg}</span>
+                  <span style={{ width: '2rem', textAlign: 'center' }}>{row.pp}</span>
+                  <span style={{ width: '2.5rem', textAlign: 'center', fontWeight: 800, color: 'var(--accent)' }}>{row.pts}</span>
+                </div>
+              ))}
+              <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                <p><strong>PJ</strong> = Jugados · <strong>PG</strong> = Ganados · <strong>PP</strong> = Perdidos · <strong>Pts</strong> = Puntos</p>
+              </div>
             </div>
-          </div>
+
+            {/* Vista tabla para desktop */}
+            <div className="standings-desktop">
+              <div className="table-wrapper">
+                <table className="data-table standings-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th></th>
+                      <th>Equipo</th>
+                      <th>PJ</th>
+                      <th>PG</th>
+                      <th>PP</th>
+                      <th>SG</th>
+                      <th>SP</th>
+                      <th>Pts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {standings.map((row, i) => (
+                      <tr key={row.equipo_id} className={i < 3 ? 'top-row' : ''} style={{ background: row.equipo_id === selectedTorneo?.equipo_id ? 'var(--accent-light)' : undefined }}>
+                        <td className="rank">{i + 1}</td>
+                        <td><img src={getFileUrl(row.equipo_logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(row.equipo_nombre) + '&background=6366f1&color=fff&size=28'} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => row.equipo_logo && setViewPhoto({ url: getFileUrl(row.equipo_logo)!, nombre: row.equipo_nombre })} /></td>
+                        <td className="team-cell"><strong>{row.equipo_nombre}</strong> {row.equipo_id === selectedTorneo?.equipo_id && <span style={{ fontSize: '0.7rem', color: 'var(--accent)' }}>(tú)</span>}</td>
+                        <td>{row.pj}</td>
+                        <td>{row.pg}</td>
+                        <td>{row.pp}</td>
+                        <td>{row.sg}</td>
+                        <td>{row.sp}</td>
+                        <td className="points-cell"><strong>{row.pts}</strong></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="standings-legend">
+                <p><strong>PJ</strong> = Partidos Jugados · <strong>PG</strong> = Ganados · <strong>PP</strong> = Perdidos</p>
+                <p><strong>SG</strong> = Sets Ganados · <strong>SP</strong> = Sets Perdidos · <strong>Pts</strong> = Puntos</p>
+              </div>
+            </div>
+          </>
         )}
       </Modal>
 
@@ -813,6 +887,8 @@ export default function MyInfo() {
           </div>
         )}
       </Modal>
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </>
   );
 }

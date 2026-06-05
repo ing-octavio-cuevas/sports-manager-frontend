@@ -67,6 +67,26 @@ export const api = {
   createTournament: (data: any) => post(`${BASE_URL}/torneos/`, data),
   updateTournament: (id: number, data: any) => put(`${BASE_URL}/torneos/${id}`, { id, ...data }),
   async deleteTournament(id: number) { await del(`${BASE_URL}/torneos/${id}`); },
+  async uploadTorneoLogo(torneoId: number, file: File) {
+    const formData = new FormData();
+    formData.append('logo', file);
+    const token = localStorage.getItem('voleibol_token');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${BASE_URL}/torneos/${torneoId}/logo`, { method: 'POST', headers, body: formData });
+    if (!res.ok) throw new Error('Error al subir logo');
+    return res.json();
+  },
+  async uploadTorneoReglamento(torneoId: number, file: File) {
+    const formData = new FormData();
+    formData.append('reglamento', file);
+    const token = localStorage.getItem('voleibol_token');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${BASE_URL}/torneos/${torneoId}/reglamento`, { method: 'POST', headers, body: formData });
+    if (!res.ok) throw new Error('Error al subir reglamento');
+    return res.json();
+  },
 
   // Ubicaciones
   getUbicaciones: (torneoId: number) => get(`${BASE_URL}/torneos/${torneoId}/ubicaciones`),
@@ -86,6 +106,16 @@ export const api = {
   createEquipo: (data: any) => post(`${BASE_URL}/equipos/`, data),
   updateEquipo: (id: number, data: any) => put(`${BASE_URL}/equipos/${id}`, data),
   async deleteEquipo(id: number) { await del(`${BASE_URL}/equipos/${id}`); },
+  async uploadEquipoLogo(equipoId: number, file: File) {
+    const formData = new FormData();
+    formData.append('logo', file);
+    const token = localStorage.getItem('voleibol_token');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${BASE_URL}/equipos/${equipoId}/logo`, { method: 'POST', headers, body: formData });
+    if (!res.ok) throw new Error('Error al subir logo');
+    return res.json();
+  },
 
   // Jugadores
   getJugadores: (equipoId: number) => get(`${BASE_URL}/jugadores?equipo_id=${equipoId}`),

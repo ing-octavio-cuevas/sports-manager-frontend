@@ -124,14 +124,14 @@ export default function Teams() {
 
   const filteredTeams = selectedTournament
     ? teams.filter(t => t.torneo_id === Number(selectedTournament))
-    : teams;
+    : [];
 
   // Team CRUD
   const openCreate = () => {
     setEditing(null);
     setForm({
       ...emptyForm,
-      torneo_id: selectedTournament ? Number(selectedTournament) : (tournaments[0]?.id || 0),
+      torneo_id: selectedTournament ? Number(selectedTournament) : 0,
     });
     setModalOpen(true);
   };
@@ -245,7 +245,11 @@ export default function Teams() {
   };
 
   const handleSavePlayer = async () => {
-    if (!playerForm.nombre.trim() || !playersTeam) return;
+    if (!playersTeam) return;
+    if (!playerForm.nombre.trim()) {
+      setToast({ message: 'El nombre es obligatorio', type: 'error' });
+      return;
+    }
     if (playerForm.es_capitan && !playerForm.celular.trim()) {
       setToast({ message: 'El celular es obligatorio para capitanes', type: 'error' });
       return;
@@ -362,7 +366,7 @@ export default function Teams() {
   return (
     <div className="page">
       <div className="page-header">
-        <h2>Equipos</h2>
+        <h2>Equipos ({filteredTeams.length})</h2>
         {isHost && <button className="btn btn-primary" onClick={openCreate}><Plus size={18} /> Nuevo Equipo</button>}
       </div>
 
@@ -382,7 +386,12 @@ export default function Teams() {
         </div>
       </div>
 
-      {filteredTeams.length === 0 ? (
+      {!selectedTournament ? (
+        <div className="empty-state">
+          <Users size={48} />
+          <p>Selecciona un torneo para ver los equipos</p>
+        </div>
+      ) : filteredTeams.length === 0 ? (
         <div className="empty-state">
           <Users size={48} />
           <p>No hay equipos registrados</p>
@@ -427,9 +436,12 @@ export default function Teams() {
           <table className="data-table">
             <thead>
               <tr>
+                <th>#</th>
                 <th>Logo</th>
                 <th>Nombre</th>
                 <th>Torneo</th>
+                <th>Periodo</th>
+                <th>Categoría</th>
                 <th>Estatus</th>
                 <th>Inscripción</th>
                 <th>Monto</th>
@@ -438,13 +450,16 @@ export default function Teams() {
               </tr>
             </thead>
             <tbody>
-              {[...filteredTeams].sort((a, b) => a.id - b.id).map(t => (
+              {[...filteredTeams].sort((a, b) => a.id - b.id).map((t, index) => (
                 <tr key={t.id}>
+                  <td><strong>{index + 1}</strong></td>
                   <td>
                     <img src={t.logo && t.logo !== 'Desconocido' ? t.logo : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(t.nombre) + '&background=6366f1&color=fff&size=32'} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
                   </td>
                   <td><strong>{t.nombre}</strong></td>
                   <td>{getTournamentName(t.torneo_id)}</td>
+                  <td>{tournaments.find(tr => tr.id === t.torneo_id)?.periodo || '—'}</td>
+                  <td>{tournaments.find(tr => tr.id === t.torneo_id)?.categoria || '—'}</td>
                   <td><span className={`badge badge-${t.estatus ? 'active' : 'inactive'}`}>{t.estatus ? 'Activo' : 'Inactivo'}</span></td>
                   <td><span className={`badge ${t.inscripcion_pagada ? 'badge-active' : 'badge-inactive'}`}>{t.inscripcion_pagada ? 'Pagada' : 'Pendiente'}</span></td>
                   <td>{t.monto_pagado !== null ? `$${t.monto_pagado}` : '—'}</td>
@@ -490,10 +505,34 @@ export default function Teams() {
               </select>
             </div>
           )}
-          <div className="form-group">
-            <label>Logo (URL)</label>
-            <input value={form.logo} onChange={e => setForm({ ...form, logo: e.target.value })} placeholder="https://..." />
-          </div>
+          {editing && (
+            <div className="form-group">
+              <label>Logo</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <img
+                  src={getFileUrl(editing.logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(editing.nombre) + '&background=3b82f6&color=fff&size=48'}
+                  alt=""
+                  style={{ width: 48, height: 48, borderRadius: 'var(--radius-sm)', objectFit: 'cover', border: '1px solid var(--border)' }}
+                />
+                <label className="btn btn-sm btn-secondary" style={{ cursor: 'pointer' }}>
+                  📷 {editing.logo ? 'Cambiar' : 'Subir'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !editing) return;
+                    try {
+                      await api.uploadEquipoLogo(editing.id, file);
+                      await fetchTeams();
+                      const data = await api.getEquipos(usuario?.anfitrion_id ? { anfitrion_id: usuario.anfitrion_id } : undefined);
+                      const updated = Array.isArray(data) ? data.find((t: any) => t.id === editing.id) : null;
+                      if (updated) setEditing(updated);
+                      setToast({ message: 'Logo actualizado', type: 'success' });
+                    } catch { setToast({ message: 'Error al subir logo', type: 'error' }); }
+                    e.target.value = '';
+                  }} />
+                </label>
+              </div>
+            </div>
+          )}
           <div className="form-group">
             <label className="checkbox-label">
               <input type="checkbox" checked={form.estatus} onChange={e => setForm({ ...form, estatus: e.target.checked })} />
@@ -526,13 +565,41 @@ export default function Teams() {
       {/* View Team Modal */}
       <Modal open={!!viewTeam} onClose={() => setViewTeam(null)} title={viewTeam?.nombre || ''}>
         {viewTeam && (
-          <div className="detail-grid">
-            <p><strong>Torneo:</strong> {getTournamentName(viewTeam.torneo_id)}</p>
-            <p><strong>Estatus:</strong> {viewTeam.estatus ? 'Activo' : 'Inactivo'}</p>
-            <p><strong>Inscripción:</strong> {viewTeam.inscripcion_pagada ? 'Pagada' : 'Pendiente'}</p>
-            {viewTeam.monto_pagado !== null && <p><strong>Monto pagado:</strong> ${viewTeam.monto_pagado}</p>}
-            {viewTeam.fecha_pago_inscripcion && <p><strong>Fecha de pago:</strong> {formatDate(viewTeam.fecha_pago_inscripcion)}</p>}
-            <p><strong>Fecha de creación:</strong> {formatDate(viewTeam.fecha_creacion)}</p>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+              <img
+                src={getFileUrl(viewTeam.logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(viewTeam.nombre) + '&background=3b82f6&color=fff&size=64'}
+                alt=""
+                style={{ width: 64, height: 64, borderRadius: 'var(--radius-sm)', objectFit: 'cover', border: '1px solid var(--border)', cursor: 'pointer' }}
+                onClick={() => viewTeam.logo && setViewPhoto({ url: getFileUrl(viewTeam.logo)!, nombre: viewTeam.nombre })}
+              />
+              {isHost && (
+                <label className="btn btn-sm btn-secondary" style={{ cursor: 'pointer' }}>
+                  📷 {viewTeam.logo ? 'Cambiar Logo' : 'Subir Logo'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !viewTeam) return;
+                    try {
+                      await api.uploadEquipoLogo(viewTeam.id, file);
+                      await fetchTeams();
+                      const data = await api.getEquipos(usuario?.anfitrion_id ? { anfitrion_id: usuario.anfitrion_id } : undefined);
+                      const updated = Array.isArray(data) ? data.find((t: any) => t.id === viewTeam.id) : null;
+                      if (updated) setViewTeam(updated);
+                      setToast({ message: 'Logo actualizado', type: 'success' });
+                    } catch { setToast({ message: 'Error al subir logo', type: 'error' }); }
+                    e.target.value = '';
+                  }} />
+                </label>
+              )}
+            </div>
+            <div className="detail-grid">
+              <p><strong>Torneo:</strong> {getTournamentName(viewTeam.torneo_id)}</p>
+              <p><strong>Estatus:</strong> {viewTeam.estatus ? 'Activo' : 'Inactivo'}</p>
+              <p><strong>Inscripción:</strong> {viewTeam.inscripcion_pagada ? 'Pagada' : 'Pendiente'}</p>
+              {viewTeam.monto_pagado !== null && <p><strong>Monto pagado:</strong> ${viewTeam.monto_pagado}</p>}
+              {viewTeam.fecha_pago_inscripcion && <p><strong>Fecha de pago:</strong> {formatDate(viewTeam.fecha_pago_inscripcion)}</p>}
+              <p><strong>Fecha de creación:</strong> {formatDate(viewTeam.fecha_creacion)}</p>
+            </div>
           </div>
         )}
       </Modal>
@@ -617,7 +684,7 @@ export default function Teams() {
         <div className="form-stack">
           <div className="form-group">
             <label>Nombre completo *</label>
-            <input value={playerForm.nombre} onChange={e => { if (!editingPlayer) setPlayerForm({ ...playerForm, nombre: e.target.value }); }} placeholder="Ej: Juan Pérez" disabled={!!editingPlayer} style={editingPlayer ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
+            <input value={playerForm.nombre} onChange={e => setPlayerForm({ ...playerForm, nombre: e.target.value })} placeholder="Ej: Juan Pérez" />
           </div>
           <div className="form-group">
             <label>Número</label>
@@ -632,12 +699,12 @@ export default function Teams() {
                 }
               }}
               placeholder="Ej: 10"
-              disabled={!!editingPlayer}
-              style={editingPlayer ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined}
+              disabled={!!editingPlayer && !!editingPlayer.numero}
+              style={editingPlayer && editingPlayer.numero ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined}
             />
           </div>
           <div className="form-group">
-            <label>Posición</label>
+            <label>Posición (opcional)</label>
             <select value={playerForm.posicion} onChange={e => setPlayerForm({ ...playerForm, posicion: e.target.value })}>
               <option value="">Seleccionar...</option>
               <option value="Setter">Setter</option>
@@ -649,7 +716,7 @@ export default function Teams() {
             </select>
           </div>
           <div className="form-group">
-            <label>CURP</label>
+            <label>CURP (opcional)</label>
             <input value={playerForm.curp} onChange={e => setPlayerForm({ ...playerForm, curp: e.target.value.slice(0, 18).toUpperCase() })} placeholder="Opcional" maxLength={18} />
           </div>
           <div className="form-group">
@@ -658,12 +725,14 @@ export default function Teams() {
               Activo
             </label>
           </div>
-          <div className="form-group">
-            <label className="checkbox-label">
-              <input type="checkbox" checked={playerForm.es_capitan} onChange={e => setPlayerForm({ ...playerForm, es_capitan: e.target.checked })} />
-              Capitán
-            </label>
-          </div>
+          {(!playersTeam || !teamsWithCaptain.has(playersTeam.id) || (editingPlayer && editingPlayer.es_capitan)) && (
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input type="checkbox" checked={playerForm.es_capitan} onChange={e => setPlayerForm({ ...playerForm, es_capitan: e.target.checked })} />
+                Capitán
+              </label>
+            </div>
+          )}
           {playerForm.es_capitan && (
             <div className="form-group">
               <label>Celular del capitán *</label>

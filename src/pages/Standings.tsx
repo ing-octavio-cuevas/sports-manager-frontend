@@ -4,7 +4,7 @@ import { ClipboardList, AlertTriangle } from 'lucide-react';
 import { api, getFileUrl } from '@/services/api';
 import { formatDate } from '@/utils/dateUtils';
 import Modal from '@/components/ui/Modal';
-import type { Team, Player, Matchday, Partido, PartidoArbitraje } from '@/types';
+import type { Player } from '@/types';
 
 interface PosicionRow {
   equipo_id: number;
@@ -15,14 +15,16 @@ interface PosicionRow {
   sg: number;
   sp: number;
   pts: number;
+  inscripcion_pagada: boolean;
+  monto_pagado: number | null;
+  adeudos: Adeudo[];
 }
 
 interface Adeudo {
   partido_id: number;
-  jornada_numero: number;
-  equipo_local: string;
-  equipo_visitante: string;
+  rival: string;
   monto: number | null;
+  fecha_partido: string;
 }
 
 export default function Standings() {
@@ -31,61 +33,18 @@ export default function Standings() {
   const [standings, setStandings] = useState<PosicionRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Adeudos por equipo
-  const [adeudos, setAdeudos] = useState<Record<number, Adeudo[]>>({});
-  const [equiposTorneo, setEquiposTorneo] = useState<Team[]>([]);
-
   // Detalle equipo
-  const [viewTeam, setViewTeam] = useState<Team | null>(null);
+  const [viewTeam, setViewTeam] = useState<PosicionRow | null>(null);
   const [teamPlayers, setTeamPlayers] = useState<Player[]>([]);
-  const [teamAdeudos, setTeamAdeudos] = useState<Adeudo[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(false);
 
   const fetchStandings = useCallback(async () => {
-    if (!selectedTournament) { setStandings([]); setAdeudos({}); return; }
+    if (!selectedTournament) { setStandings([]); return; }
     setLoading(true);
     try {
       const torneoId = Number(selectedTournament);
-      const [posData, jornadasData] = await Promise.all([
-        api.getTablaPosiciones(torneoId),
-        api.getJornadas(torneoId),
-      ]);
+      const posData = await api.getTablaPosiciones(torneoId);
       setStandings(Array.isArray(posData) ? posData : []);
-
-      // Obtener jornadas terminadas
-      const jornadasTerminadas = (Array.isArray(jornadasData) ? jornadasData : []).filter((j: Matchday) => j.estatus === true);
-
-      // Obtener partidos y arbitrajes de jornadas terminadas
-      const adeudosMap: Record<number, Adeudo[]> = {};
-      const equiposData = await api.getEquipos({ torneo_id: torneoId });
-      const equipos = Array.isArray(equiposData) ? equiposData : [];
-      setEquiposTorneo(equipos.filter((e: Team) => e.torneo_id === torneoId));
-
-      for (const jornada of jornadasTerminadas) {
-        const partidos = await api.getPartidos(torneoId, jornada.id);
-        const partidosList: Partido[] = Array.isArray(partidos) ? partidos : [];
-
-        for (const partido of partidosList) {
-          const arbs = await api.getArbitrajes(partido.id);
-          const arbsList: PartidoArbitraje[] = Array.isArray(arbs) ? arbs : [];
-
-          for (const arb of arbsList) {
-            if (!arb.pagado) {
-              if (!adeudosMap[arb.equipo_id]) adeudosMap[arb.equipo_id] = [];
-              const localName = equipos.find((e: Team) => e.id === partido.equipo_local_id)?.nombre || '?';
-              const visitanteName = equipos.find((e: Team) => e.id === partido.equipo_visitante_id)?.nombre || '?';
-              adeudosMap[arb.equipo_id].push({
-                partido_id: partido.id,
-                jornada_numero: jornada.numero,
-                equipo_local: localName,
-                equipo_visitante: visitanteName,
-                monto: arb.monto,
-              });
-            }
-          }
-        }
-      }
-      setAdeudos(adeudosMap);
     } catch (err) {
       console.error(err);
       setStandings([]);
@@ -96,17 +55,12 @@ export default function Standings() {
 
   useEffect(() => { fetchStandings(); }, [fetchStandings]);
 
-  const openTeamDetail = async (equipoId: number) => {
+  const openTeamDetail = async (row: PosicionRow) => {
     setLoadingTeam(true);
-    setViewTeam(null);
+    setViewTeam(row);
     setTeamPlayers([]);
-    setTeamAdeudos(adeudos[equipoId] || []);
     try {
-      const [team, players] = await Promise.all([
-        api.getEquipo(equipoId),
-        api.getJugadores(equipoId),
-      ]);
-      setViewTeam(team);
+      const players = await api.getJugadores(row.equipo_id);
       setTeamPlayers(Array.isArray(players) ? players : []);
     } catch (err) {
       console.error(err);
@@ -155,7 +109,7 @@ export default function Standings() {
               {standings.map((row, i) => (
                 <tr key={row.equipo_id} className={i < 3 ? 'top-row' : ''}>
                   <td className="rank">{i + 1}</td>
-                  <td className="team-cell"><button className="btn btn-sm btn-ghost" style={{ padding: 0, fontWeight: 700, color: 'var(--text)' }} onClick={() => openTeamDetail(row.equipo_id)}>{row.equipo_nombre}</button></td>
+                  <td className="team-cell"><button className="btn btn-sm btn-ghost" style={{ padding: 0, fontWeight: 700, color: 'var(--text)' }} onClick={() => openTeamDetail(row)}>{row.equipo_nombre}</button></td>
                   <td>{row.pj}</td>
                   <td>{row.pg}</td>
                   <td>{row.pp}</td>
@@ -163,8 +117,8 @@ export default function Standings() {
                   <td>{row.sp}</td>
                   <td className="points-cell"><strong>{row.pts}</strong></td>
                   <td className="text-center">
-                    {(adeudos[row.equipo_id]?.length || 0) > 0 ? (
-                      <span title={`${adeudos[row.equipo_id].length} adeudo(s)`} style={{ color: 'var(--danger)' }}>
+                    {row.adeudos.length > 0 ? (
+                      <span title={`${row.adeudos.length} adeudo(s)`} style={{ color: 'var(--danger)' }}>
                         <AlertTriangle size={16} />
                       </span>
                     ) : (
@@ -173,8 +127,7 @@ export default function Standings() {
                   </td>
                   <td className="text-center">
                     {(() => {
-                      const equipo = equiposTorneo.find(e => e.id === row.equipo_id);
-                      return equipo?.inscripcion_pagada
+                      return row.inscripcion_pagada
                         ? <span style={{ color: 'var(--success)' }}>✓</span>
                         : <span title="Inscripción pendiente" style={{ color: 'var(--danger)' }}><AlertTriangle size={16} /></span>;
                     })()}
@@ -191,27 +144,14 @@ export default function Standings() {
       )}
 
       {/* Team Detail Modal */}
-      <Modal open={!!viewTeam || loadingTeam} onClose={() => { setViewTeam(null); setTeamPlayers([]); }} title={viewTeam?.nombre || 'Cargando...'} wide>
+      <Modal open={!!viewTeam || loadingTeam} onClose={() => { setViewTeam(null); setTeamPlayers([]); }} title={viewTeam?.equipo_nombre || 'Cargando...'} wide>
         {loadingTeam ? (
           <p>Cargando información del equipo...</p>
         ) : viewTeam && (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-              <img
-                src={viewTeam.logo && viewTeam.logo !== 'Desconocido' ? viewTeam.logo : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(viewTeam.nombre) + '&background=6366f1&color=fff&size=64'}
-                alt=""
-                style={{ width: 64, height: 64, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }}
-              />
-              <div>
-                <h3 style={{ marginBottom: '0.25rem' }}>{viewTeam.nombre}</h3>
-                <span className={`badge badge-${viewTeam.estatus ? 'active' : 'inactive'}`}>{viewTeam.estatus ? 'Activo' : 'Inactivo'}</span>
-              </div>
-            </div>
-
             <div className="detail-grid" style={{ marginBottom: '1.5rem' }}>
               <p><strong>Inscripción:</strong> {viewTeam.inscripcion_pagada ? 'Pagada' : 'Pendiente'}</p>
               {viewTeam.monto_pagado !== null && <p><strong>Monto pagado:</strong> ${viewTeam.monto_pagado}</p>}
-              <p><strong>Fecha de creación:</strong> {formatDate(viewTeam.fecha_creacion)}</p>
             </div>
 
             <h4 style={{ marginBottom: '0.75rem' }}>Jugadores ({teamPlayers.length})</h4>
@@ -251,25 +191,25 @@ export default function Standings() {
             )}
 
             {/* Adeudos */}
-            {teamAdeudos.length > 0 && (
+            {viewTeam.adeudos.length > 0 && (
               <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
                 <h4 style={{ marginBottom: '0.75rem', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <AlertTriangle size={18} /> Adeudos de arbitraje ({teamAdeudos.length})
+                  <AlertTriangle size={18} /> Adeudos de arbitraje ({viewTeam.adeudos.length})
                 </h4>
                 <div className="table-wrapper">
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>Jornada</th>
-                        <th>Partido</th>
+                        <th>Rival</th>
+                        <th>Fecha</th>
                         <th>Monto</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {teamAdeudos.map((a, i) => (
+                      {viewTeam.adeudos.map((a, i) => (
                         <tr key={i}>
-                          <td>Jornada {a.jornada_numero}</td>
-                          <td>{a.equipo_local} vs {a.equipo_visitante}</td>
+                          <td>{a.rival}</td>
+                          <td>{formatDate(a.fecha_partido)}</td>
                           <td>{a.monto !== null ? `$${a.monto}` : 'Sin definir'}</td>
                         </tr>
                       ))}

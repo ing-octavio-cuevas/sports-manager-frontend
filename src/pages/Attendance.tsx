@@ -12,6 +12,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 interface PartidoCapitan {
   id: number;
   torneo_id: number;
+  torneo_nombre: string;
   jornada_id: number;
   jornada_numero: number;
   jornada_fecha: string;
@@ -22,6 +23,7 @@ interface PartidoCapitan {
   ubicacion_id: number | null;
   ubicacion_nombre: string | null;
   ubicacion_direccion: string | null;
+  ubicacion_url: string | null;
   fecha_hora: string | null;
   es_hoy: boolean;
   caducado: boolean;
@@ -42,7 +44,7 @@ interface AsistenciaRegistro {
 
 export default function Attendance() {
   const { usuario } = useAuth();
-  const { teams, tournaments } = useApp();
+  const { teams } = useApp();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Partidos disponibles
@@ -99,7 +101,6 @@ export default function Attendance() {
   useEffect(() => { fetchPartidos(); }, [fetchPartidos]);
 
   const getTeamName = (id: number) => teams.find(t => t.id === id)?.nombre || `Equipo ${id}`;
-  const getTorneoName = (id: number) => tournaments.find(t => t.id === id)?.nombre || `Torneo ${id}`;
 
   // Jugadores del equipo contrario
   const [jugadoresContrario, setJugadoresContrario] = useState<any[]>([]);
@@ -266,6 +267,7 @@ export default function Attendance() {
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [viewPhoto, setViewPhoto] = useState<{ url: string; nombre: string } | null>(null);
   const [filtroAsistencia, setFiltroAsistencia] = useState<'hoy' | 'caducadas'>('hoy');
+  const [viewUbicacion, setViewUbicacion] = useState<{ nombre: string; direccion: string; url: string | null } | null>(null);
 
   // Guardar asistencias
   const handleSaveAsistencias = async () => {
@@ -340,11 +342,13 @@ export default function Attendance() {
               <div key={p.id} className="card" style={{ cursor: 'pointer', borderLeft: p.asistencia_registrada ? '4px solid var(--success)' : undefined }} onClick={() => openPartido(p)}>
                 <h3 className="card-title">{getTeamName(p.equipo_local_id)} vs {getTeamName(p.equipo_visitante_id)}</h3>
                 <div className="card-details">
-                  <p><strong>Torneo:</strong> {getTorneoName(p.torneo_id)}</p>
+                  <p><strong>Torneo:</strong> {p.torneo_nombre}</p>
                   <p><strong>Jornada:</strong> {p.jornada_numero ? `Jornada ${p.jornada_numero}` : '—'}</p>
                   <p><strong>Fecha:</strong> {p.fecha_hora ? formatDate(p.fecha_hora) : p.jornada_fecha ? formatDate(p.jornada_fecha) : '—'}</p>
                   <p><strong>Hora:</strong> {p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
-                  <p><strong>Lugar:</strong> {p.ubicacion_nombre || '—'}</p>
+                  <p><strong>Lugar:</strong> {p.ubicacion_nombre ? (
+                    <button className="btn btn-sm btn-ghost" style={{ padding: 0, textDecoration: 'underline', fontSize: '0.85rem' }} onClick={(e) => { e.stopPropagation(); setViewUbicacion({ nombre: p.ubicacion_nombre!, direccion: p.ubicacion_direccion || '', url: p.ubicacion_url || null }); }}>{p.ubicacion_nombre}</button>
+                  ) : '—'}</p>
                   <p><strong>Tipo:</strong> {p.tipo || '—'}</p>
                   {p.asistencia_registrada && (
                     <p style={{ color: 'var(--success)', fontWeight: 600 }}>✓ Asistencia registrada</p>
@@ -508,6 +512,23 @@ export default function Attendance() {
         {viewPhoto && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
             <img src={viewPhoto.url} alt={viewPhoto.nombre} style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: 'var(--radius)', objectFit: 'contain' }} />
+          </div>
+        )}
+      </Modal>
+
+      {/* View Ubicacion Modal */}
+      <Modal open={!!viewUbicacion} onClose={() => setViewUbicacion(null)} title={viewUbicacion?.nombre || 'Ubicación'}>
+        {viewUbicacion && (
+          <div>
+            <p><strong>Nombre:</strong> {viewUbicacion.nombre}</p>
+            <p><strong>Dirección:</strong> {viewUbicacion.direccion || '—'}</p>
+            {viewUbicacion.url && (
+              <p style={{ marginTop: '0.75rem' }}>
+                <a href={viewUbicacion.url} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-primary" style={{ textDecoration: 'none' }}>
+                  📍 Ver en Google Maps
+                </a>
+              </p>
+            )}
           </div>
         )}
       </Modal>

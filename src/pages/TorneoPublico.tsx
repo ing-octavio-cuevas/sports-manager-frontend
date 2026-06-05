@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Trophy, Users, ClipboardList } from 'lucide-react';
 import { getFileUrl } from '@/services/api';
+import { formatDate } from '@/utils/dateUtils';
+import Modal from '@/components/ui/Modal';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
@@ -37,9 +39,10 @@ interface TorneoPublicoData {
     }[];
     ultimas_asistencias: {
       partido_id: number;
+      jornada_numero: number;
       fecha: string;
       rival: string;
-      jugadores_presentes: number;
+      jugadores_presentes: { jugador_id: number; nombre: string; numero: number; foto: string | null }[];
       total_jugadores: number;
     }[];
   }[];
@@ -51,6 +54,7 @@ export default function TorneoPublico() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEquipo, setSelectedEquipo] = useState<number | null>(null);
+  const [viewPhoto, setViewPhoto] = useState<{ url: string; nombre: string } | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,6 +62,7 @@ export default function TorneoPublico() {
         const res = await fetch(`${BASE_URL}/torneos/${id}/resumen`);
         if (!res.ok) throw new Error('Torneo no encontrado');
         const json = await res.json();
+        if (json.equipos) json.equipos.sort(() => Math.random() - 0.5);
         setData(json);
       } catch (err: any) {
         setError(err.message || 'Error al cargar');
@@ -147,78 +152,95 @@ export default function TorneoPublico() {
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Users size={20} /> Equipos ({equipos.length})
         </h2>
-        <div className="card-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.75rem' }}>
           {equipos.map(eq => (
-            <div key={eq.id} className="card" style={{ cursor: 'pointer' }} onClick={() => setSelectedEquipo(eq.id === selectedEquipo ? null : eq.id)}>
-              <h3 className="card-title">{eq.nombre}</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{eq.jugadores.length} jugadores</p>
+            <div key={eq.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.75rem 1rem', background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '50px', boxShadow: 'var(--shadow)', transition: 'var(--transition)' }}>
+              <img
+                src={getFileUrl(eq.logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(eq.nombre) + '&background=3b82f6&color=fff&size=32'}
+                alt=""
+                style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', flexShrink: 0 }}
+                onClick={() => eq.logo && setViewPhoto({ url: getFileUrl(eq.logo)!, nombre: eq.nombre })}
+              />
+              <span style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }} onClick={() => setSelectedEquipo(eq.id)}>{eq.nombre}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Detalle equipo seleccionado */}
-      {selectedTeam && (
-        <div style={{ marginTop: '1.5rem', background: 'var(--card-bg)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow)' }}>
-          <h3 style={{ marginBottom: '1rem' }}>{selectedTeam.nombre}</h3>
-
-          {/* Jugadores */}
-          <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem' }}>Jugadores</h4>
-          <div className="table-wrapper" style={{ marginBottom: '1.5rem' }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Foto</th>
-                  <th>Nombre</th>
-                  <th>#</th>
-                  <th>Posición</th>
-                  <th>Capitán</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedTeam.jugadores.map(j => (
-                  <tr key={j.id}>
-                    <td><img src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=32'} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} /></td>
-                    <td><strong>{j.nombre}</strong></td>
-                    <td>{j.numero}</td>
-                    <td>{j.posicion || '—'}</td>
-                    <td className="text-center">{j.es_capitan ? '⭐' : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Últimas asistencias */}
-          <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem' }}>Últimas Asistencias</h4>
-          {selectedTeam.ultimas_asistencias.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Sin registros de asistencia.</p>
-          ) : (
-            <div className="table-wrapper">
+      {/* Modal detalle equipo */}
+      <Modal open={!!selectedTeam} onClose={() => setSelectedEquipo(null)} title={selectedTeam?.nombre || ''} wide>
+        {selectedTeam && (
+          <div>
+            {/* Jugadores */}
+            <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem' }}>Jugadores</h4>
+            <div className="table-wrapper" style={{ marginBottom: '1.5rem' }}>
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Fecha</th>
-                    <th>Rival</th>
-                    <th>Asistencia</th>
+                    <th>Foto</th>
+                    <th>Nombre</th>
+                    <th>#</th>
+                    <th>Posición</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedTeam.ultimas_asistencias.map(a => (
-                    <tr key={a.partido_id}>
-                      <td>{a.fecha}</td>
-                      <td>{a.rival}</td>
-                      <td>{a.jugadores_presentes}/{a.total_jugadores}</td>
+                  {selectedTeam.jugadores.map(j => (
+                    <tr key={j.id}>
+                      <td><img src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=32'} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=256', nombre: j.nombre })} /></td>
+                      <td><strong>{j.nombre}</strong>{j.es_capitan && <span style={{ fontSize: '0.7rem', verticalAlign: 'super', marginLeft: '2px' }}>⭐</span>}</td>
+                      <td>{j.numero}</td>
+                      <td>{j.posicion || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      )}
 
-      <p style={{ textAlign: 'center', marginTop: '2rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Sports Manager</p>
+            {/* Últimas asistencias */}
+            <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem' }}>Últimas Asistencias</h4>
+            {selectedTeam.ultimas_asistencias.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Sin registros de asistencia.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {selectedTeam.ultimas_asistencias.map(a => (
+                  <div key={a.partido_id} style={{ background: 'var(--bg)', borderRadius: 'var(--radius-sm)', padding: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>vs {a.rival}</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>J{a.jornada_numero} · {formatDate(a.fecha)} {new Date(a.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                      {a.jugadores_presentes.map(j => (
+                        <span key={j.jugador_id} style={{ background: 'var(--success-light)', color: '#065f46', padding: '0.2rem 0.5rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                          <img src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=10b981&color=fff&size=20'} alt="" style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=10b981&color=fff&size=256', nombre: j.nombre })} />
+                          #{j.numero} {j.nombre}
+                        </span>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+                      {a.jugadores_presentes.length}/{a.total_jugadores} presentes
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* View Photo Modal */}
+      <Modal open={!!viewPhoto} onClose={() => setViewPhoto(null)} title={viewPhoto?.nombre || 'Foto'}>
+        {viewPhoto && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
+            <img src={viewPhoto.url} alt={viewPhoto.nombre} style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px', objectFit: 'contain' }} />
+          </div>
+        )}
+      </Modal>
+
+      <p style={{ textAlign: 'center', marginTop: '2rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+        <a href="/login" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
+          Sports Manager
+        </a>
+      </p>
     </div>
   );
 }

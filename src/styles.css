@@ -499,6 +499,7 @@ body {
 }
 
 .data-table tbody tr:hover { background: var(--bg); }
+.data-table tbody tr:nth-child(even) { background: var(--bg); }
 .text-center { text-align: center; }
 
 /* ===== STANDINGS ===== */
@@ -506,7 +507,7 @@ body {
 .standings-table .team-cell { text-align: left; }
 .standings-table .rank { font-weight: 800; color: var(--accent); }
 .standings-table .points-cell { color: var(--accent); font-size: 1rem; }
-.standings-table .top-row { background: var(--accent-light); }
+.standings-table .top-row { background: transparent; }
 
 .standings-legend {
   margin-top: 1rem;
@@ -782,28 +783,102 @@ img[style*="cursor: pointer"] {
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
-  .mobile-header { display: flex; }
+  .mobile-header {
+    display: flex;
+    height: 48px;
+    padding: 0 1rem;
+    background: var(--card-bg);
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  .mobile-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+  }
 
   .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
     transform: translateX(-100%);
-    transition: transform 0.3s ease;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 200;
+    border-radius: 0 16px 16px 0;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.15);
   }
 
   .sidebar.open { transform: translateX(0); }
+
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 190;
+    backdrop-filter: blur(2px);
+  }
+
   .sidebar.open ~ .sidebar-overlay { display: block; }
+
+  .sidebar-nav .nav-link {
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    border-radius: var(--radius);
+  }
 
   .main-content {
     margin-left: 0;
-    padding: 1rem;
-    padding-top: calc(56px + 1rem);
+    padding: 0.75rem;
+    padding-top: calc(48px + 0.75rem);
+    padding-bottom: 1rem;
+    min-height: calc(100vh - 48px);
   }
 
-  .card-grid { grid-template-columns: 1fr; }
+  .page { padding: 0; }
+
+  .page-header {
+    margin-bottom: 1rem;
+  }
+
+  .page-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .card-grid { grid-template-columns: 1fr; gap: 0.75rem; }
   .form-grid { grid-template-columns: 1fr; }
   .attendance-grid { grid-template-columns: 1fr; }
   .court-row { grid-template-columns: 1fr; }
-
   .detail-grid { grid-template-columns: 1fr; }
+
+  .card {
+    padding: 1rem;
+    border-radius: var(--radius);
+  }
+
+  .card:hover {
+    transform: none;
+    box-shadow: var(--shadow);
+  }
+
+  /* Modal en móvil */
+  .modal-overlay {
+    padding: 0.5rem;
+    align-items: center;
+  }
+
+  .modal-content {
+    border-radius: var(--radius);
+    max-height: 90vh;
+  }
+
+  .modal-wide, .modal-extra-wide {
+    max-width: 100%;
+  }
 
   .sets-header, .sets-row {
     grid-template-columns: 100px repeat(auto-fill, 55px) 45px;
@@ -826,10 +901,14 @@ img[style*="cursor: pointer"] {
 /* ===== PARTIDOS RESPONSIVE ===== */
 .partidos-cards-mobile { display: none; }
 .partidos-table-desktop { display: block; }
+.standings-mobile { display: none; }
+.standings-desktop { display: block; }
 
-@media (max-width: 768px) {
+@media (max-width: 768px) and (orientation: portrait) {
   .partidos-cards-mobile { display: flex; flex-direction: column; gap: 0.75rem; }
   .partidos-table-desktop { display: none; }
+  .standings-mobile { display: flex; flex-direction: column; gap: 0.25rem; }
+  .standings-desktop { display: none; }
 }
 
 /* ===== PUBLIC PAGE ===== */

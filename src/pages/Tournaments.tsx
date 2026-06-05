@@ -6,7 +6,7 @@ import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
 import type { Tournament, Ubicacion } from '@/types';
-import { api } from '@/services/api';
+import { api, getFileUrl } from '@/services/api';
 import { formatDate } from '@/utils/dateUtils';
 
 interface TournamentForm {
@@ -54,6 +54,7 @@ export default function Tournaments() {
   const [viewTournament, setViewTournament] = useState<Tournament | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [viewPhoto, setViewPhoto] = useState<{ url: string; nombre: string } | null>(null);
 
   // Ubicaciones
   const [ubicacionesModal, setUbicacionesModal] = useState<Tournament | null>(null);
@@ -105,7 +106,8 @@ export default function Tournaments() {
     setSaving(true);
     try {
       if (editing) {
-        await api.updateTournament(editing.id, form);
+        const { logo, reglamento, ...updateData } = form;
+        await api.updateTournament(editing.id, updateData);
       } else {
         await api.createTournament(form);
       }
@@ -268,7 +270,7 @@ export default function Tournaments() {
           {[...tournaments].sort((a, b) => a.id - b.id).map(t => (
             <div key={t.id} className="card">
               <div className="card-header-row">
-                <img src={t.logo || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(t.nombre) + '&background=3b82f6&color=fff&size=64'} alt="" className="card-logo" />
+                <img src={getFileUrl(t.logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(t.nombre) + '&background=3b82f6&color=fff&size=64'} alt="" className="card-logo" style={{ cursor: 'pointer' }} onClick={() => t.logo && setViewPhoto({ url: getFileUrl(t.logo)!, nombre: t.nombre })} />
                 <div>
                   <h3 className="card-title">{t.nombre}</h3>
                   <span className={`badge badge-${t.publicado ? 'active' : 'inactive'}`}>
@@ -313,9 +315,10 @@ export default function Tournaments() {
                 <tr key={t.id}>
                   <td>
                     <img
-                      src={t.logo || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(t.nombre) + '&background=3b82f6&color=fff&size=32'}
+                      src={getFileUrl(t.logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(t.nombre) + '&background=3b82f6&color=fff&size=32'}
                       alt=""
-                      style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                      style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }}
+                      onClick={() => t.logo && setViewPhoto({ url: getFileUrl(t.logo)!, nombre: t.nombre })}
                     />
                   </td>
                   <td><strong>{t.nombre}</strong></td>
@@ -352,20 +355,12 @@ export default function Tournaments() {
             <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Ej: Torneo de Verano 2026" />
           </div>
           <div className="form-group">
-            <label>Logo (URL)</label>
-            <input value={form.logo} onChange={e => setForm({ ...form, logo: e.target.value })} placeholder="https://..." />
-          </div>
-          <div className="form-group">
             <label>Periodo</label>
             <input value={form.periodo} onChange={e => setForm({ ...form, periodo: e.target.value })} placeholder="Ej: 1 de diciembre a 20 de enero" />
           </div>
           <div className="form-group">
             <label>Categoría</label>
             <input value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value })} placeholder="Ej: Mixto - Libre, Femenil - 96" />
-          </div>
-          <div className="form-group">
-            <label>Reglamento (URL)</label>
-            <input value={form.reglamento} onChange={e => setForm({ ...form, reglamento: e.target.value })} placeholder="https://..." />
           </div>
           <div className="form-group">
             <label>Número de vueltas *</label>
@@ -379,6 +374,62 @@ export default function Tournaments() {
           </div>
         </div>
 
+        {editing && (
+          <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+            <h4 style={{ marginBottom: '0.75rem', fontSize: '0.9rem' }}>Archivos</h4>
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+              <div>
+                <label className="btn btn-sm btn-secondary" style={{ cursor: 'pointer' }}>
+                  📷 {editing.logo ? 'Cambiar Logo' : 'Subir Logo'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !editing) return;
+                    try {
+                      await api.uploadTorneoLogo(editing.id, file);
+                      const data = await api.getTournaments();
+                      const updated = Array.isArray(data) ? data.find((t: any) => t.id === editing.id) : null;
+                      if (updated) setEditing(updated);
+                      setTournaments(data);
+                      setToast({ message: 'Logo actualizado', type: 'success' });
+                    } catch { setToast({ message: 'Error al subir logo', type: 'error' }); }
+                    e.target.value = '';
+                  }} />
+                </label>
+                {editing.logo && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <img src={getFileUrl(editing.logo) || ''} alt="Logo" style={{ width: 64, height: 64, borderRadius: 'var(--radius-sm)', objectFit: 'cover', border: '1px solid var(--border)' }} />
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="btn btn-sm btn-secondary" style={{ cursor: 'pointer' }}>
+                  📄 {editing.reglamento ? 'Cambiar Reglamento' : 'Subir Reglamento'}
+                  <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !editing) return;
+                    try {
+                      await api.uploadTorneoReglamento(editing.id, file);
+                      const data = await api.getTournaments();
+                      const updated = Array.isArray(data) ? data.find((t: any) => t.id === editing.id) : null;
+                      if (updated) setEditing(updated);
+                      setTournaments(data);
+                      setToast({ message: 'Reglamento actualizado', type: 'success' });
+                    } catch { setToast({ message: 'Error al subir reglamento', type: 'error' }); }
+                    e.target.value = '';
+                  }} />
+                </label>
+                {editing.reglamento && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <a href={getFileUrl(editing.reglamento) || '#'} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.8rem', color: 'var(--accent)', textDecoration: 'underline' }}>
+                      📄 Ver reglamento
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
@@ -391,7 +442,7 @@ export default function Tournaments() {
       <Modal open={!!viewTournament} onClose={() => setViewTournament(null)} title={viewTournament?.nombre || ''} wide>
         {viewTournament && (
           <div>
-            <img src={viewTournament.logo || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(viewTournament.nombre) + '&background=3b82f6&color=fff&size=128'} alt="" className="detail-logo" />
+            <img src={getFileUrl(viewTournament.logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(viewTournament.nombre) + '&background=3b82f6&color=fff&size=128'} alt="" className="detail-logo" style={{ cursor: 'pointer' }} onClick={() => viewTournament.logo && setViewPhoto({ url: getFileUrl(viewTournament.logo)!, nombre: viewTournament.nombre })} />
             <div className="detail-grid">
               <p><strong>Periodo:</strong> {viewTournament.periodo}</p>
               <p><strong>Categoría:</strong> {viewTournament.categoria}</p>
@@ -582,6 +633,15 @@ export default function Tournaments() {
       <ConfirmDialog open={!!deleteId} message="¿Estás seguro de eliminar este torneo?"
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)} />
+
+      {/* View Photo Modal */}
+      <Modal open={!!viewPhoto} onClose={() => setViewPhoto(null)} title={viewPhoto?.nombre || 'Logo'}>
+        {viewPhoto && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
+            <img src={viewPhoto.url} alt={viewPhoto.nombre} style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px', objectFit: 'contain' }} />
+          </div>
+        )}
+      </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
