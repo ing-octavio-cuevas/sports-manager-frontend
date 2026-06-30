@@ -1,13 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
-import { UserCheck, Camera, Keyboard, X } from 'lucide-react';
+import { UserCheck } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
 import { api, getFileUrl } from '@/services/api';
 import { formatDate } from '@/utils/dateUtils';
-import { Html5Qrcode } from 'html5-qrcode';
 
 interface PartidoCapitan {
   id: number;
@@ -59,15 +58,11 @@ export default function Attendance() {
 
   // Registro
   const [jugadoresIds, setJugadoresIds] = useState<number[]>([]);
-  const [manualCode, setManualCode] = useState('');
-  const [scannerOpen, setScannerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const scanProcessedRef = useRef(false);
   const [capitanId, setCapitanId] = useState<number | null>(null);
-
-  // Preview jugador escaneado
-  const [previewJugador, setPreviewJugador] = useState<any | null>(null);
+  const [filtroAsistencia, setFiltroAsistencia] = useState<'hoy' | 'caducadas'>('hoy');
+  const [partidosPage, setPartidosPage] = useState(1);
+  const [partidosPages, setPartidosPages] = useState(1);
 
   // Buscar el jugador capitán del usuario logueado
   useEffect(() => {
@@ -83,24 +78,25 @@ export default function Attendance() {
     findCapitan();
   }, [usuario]);
 
-  const fetchPartidos = useCallback(async () => {
+  const fetchPartidos = useCallback(async (filtro?: string, page?: number) => {
     if (!capitanId) { setPartidos([]); setLoading(false); return; }
     setLoading(true);
     try {
-      const data = await api.getPartidosCapitan(capitanId);
-      const list = Array.isArray(data) ? data : [];
-      setPartidos(list);
+      const data = await api.getPartidosCapitan(capitanId, filtro || (filtroAsistencia === 'hoy' ? 'hoy' : 'caducados'), page || partidosPage, 6);
+      setPartidos(Array.isArray(data.partidos) ? data.partidos : []);
+      setPartidosPages(data.pages || 1);
     } catch (err) {
       console.error(err);
       setPartidos([]);
     } finally {
       setLoading(false);
     }
-  }, [capitanId]);
+  }, [capitanId, filtroAsistencia, partidosPage]);
 
   useEffect(() => { fetchPartidos(); }, [fetchPartidos]);
 
   const getTeamName = (id: number) => teams.find(t => t.id === id)?.nombre || `Equipo ${id}`;
+  const getTeamLogo = (id: number) => teams.find(t => t.id === id)?.logo || null;
 
   // Jugadores del equipo contrario
   const [jugadoresContrario, setJugadoresContrario] = useState<any[]>([]);
@@ -114,18 +110,22 @@ export default function Attendance() {
       const [asistData, estadoData, jugadoresData] = await Promise.all([
         api.getAsistenciasPartido(p.id),
         api.getEstadoAsistencia(p.id),
-        // Cargar jugadores del equipo contrario
+        // Cargar jugadores de mi equipo
         (async () => {
           const localJugadores = await api.getJugadores(p.equipo_local_id);
           const localList = Array.isArray(localJugadores) ? localJugadores : [];
           const capitanEnLocal = localList.some((j: any) => j.id === capitanId);
-          const contrarioId = capitanEnLocal ? p.equipo_visitante_id : p.equipo_local_id;
-          const contrarioJugadores = await api.getJugadores(contrarioId);
-          return Array.isArray(contrarioJugadores) ? contrarioJugadores : [];
+          const miEquipoId = capitanEnLocal ? p.equipo_local_id : p.equipo_visitante_id;
+          const miEquipoJugadores = await api.getJugadores(miEquipoId);
+          return Array.isArray(miEquipoJugadores) ? miEquipoJugadores : [];
         })(),
       ]);
       setAsistencias(Array.isArray(asistData) ? asistData : []);
-      setJugadoresContrario(jugadoresData.filter((j: any) => j.estatus));
+      const jugActivos = jugadoresData.filter((j: any) => j.estatus);
+      setJugadoresContrario(jugActivos);
+      // Pre-seleccionar todos los que no tienen asistencia
+      const asistList = Array.isArray(asistData) ? asistData : [];
+      setJugadoresIds(jugActivos.filter((j: any) => !asistList.some((a: any) => a.jugador_id === j.id)).map((j: any) => j.id));
       // Verificar si yo ya finalicé
       const yaFinalice = estadoData.registrado_por_local === capitanId || estadoData.registrado_por_visitante === capitanId;
       setMiFinalizada(yaFinalice);
@@ -137,136 +137,8 @@ export default function Attendance() {
     }
   };
 
-  // Agregar jugador por codigo_qr
-  const addPlayerByCode = async (code: string) => {
-    const cleanCode = code.trim();
-
-    if (!cleanCode) return;
-
-    try {
-      if (!selectedPartido) return;
-
-      const jugadorYaEscaneado = jugadoresContrario.find(
-        (j: any) => j.codigo_qr === cleanCode && jugadoresIds.includes(j.id)
-      );
-
-      if (jugadorYaEscaneado) {
-        setToast({ message: 'Jugador ya registrado', type: 'error' });
-        return;
-      }
-
-      const jugadorConAsistencia = jugadoresContrario.find(
-        (j: any) => j.codigo_qr === cleanCode && asistencias.some(a => a.jugador_id === j.id)
-      );
-
-      if (jugadorConAsistencia) {
-        setToast({ message: 'Jugador ya registrado', type: 'error' });
-        return;
-      }
-
-      // Buscar en ambos equipos
-      const equipoLocalJugadores = await api.getJugadores(selectedPartido.equipo_local_id);
-      const equipoVisitanteJugadores = await api.getJugadores(selectedPartido.equipo_visitante_id);
-      const todosJugadores = [
-        ...(Array.isArray(equipoLocalJugadores) ? equipoLocalJugadores : []),
-        ...(Array.isArray(equipoVisitanteJugadores) ? equipoVisitanteJugadores : []),
-      ];
-
-      const jugador = todosJugadores.find((j: any) => j.codigo_qr === cleanCode);
-
-      if (!jugador) {
-        setToast({ message: 'Código QR incorrecto', type: 'error' });
-        return;
-      }
-
-      if (jugadoresIds.includes(jugador.id)) {
-        setToast({ message: 'Jugador ya registrado', type: 'error' });
-        return;
-      }
-
-      if (asistencias.some(a => a.jugador_id === jugador.id)) {
-        setToast({ message: 'Jugador ya registrado', type: 'error' });
-        return;
-      }
-
-      setPreviewJugador(jugador);
-      // Pausar el scanner mientras se muestra el preview
-      if (scannerRef.current) {
-        try { await scannerRef.current.pause(); } catch { /* ignore */ }
-      }
-    } catch (err) {
-      console.error(err);
-      setToast({ message: 'Error al buscar jugador', type: 'error' });
-    }
-  };
-
-  const handleManualSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    addPlayerByCode(manualCode);
-    setManualCode('');
-  };
-
-  const confirmPreviewJugador = async () => {
-    if (!previewJugador) return;
-    setJugadoresIds(prev => [...prev, previewJugador.id]);
-    setToast({ message: `✓ ${previewJugador.nombre} (#${previewJugador.numero})`, type: 'success' });
-    setPreviewJugador(null);
-    // Reanudar scanner si estaba abierto
-    if (scannerRef.current && scannerOpen) {
-      try { await scannerRef.current.resume(); } catch { /* ignore */ }
-    }
-  };
-
-  const cancelPreviewJugador = async () => {
-    setPreviewJugador(null);
-    if (scannerRef.current && scannerOpen) {
-      try { await scannerRef.current.resume(); } catch { /* ignore */ }
-    }
-  };
-
-  // Scanner QR
-  const startScanner = async () => {
-    scanProcessedRef.current = false;
-    setScannerOpen(true);
-
-    setTimeout(async () => {
-      try {
-        const scanner = new Html5Qrcode('qr-reader');
-        scannerRef.current = scanner;
-
-        await scanner.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          async (decodedText) => {
-            if (scanProcessedRef.current) return;
-
-            scanProcessedRef.current = true;
-            await stopScanner();
-            await addPlayerByCode(decodedText);
-          },
-          () => {}
-        );
-      } catch (err) {
-        console.error(err);
-        setToast({ message: 'No se pudo acceder a la cámara', type: 'error' });
-        setScannerOpen(false);
-      }
-    }, 100);
-  };
-
-  const stopScanner = async () => {
-    if (scannerRef.current) {
-      try { await scannerRef.current.stop(); } catch { /* ignore */ }
-      try { await scannerRef.current.clear(); } catch { /* ignore */ }
-      scannerRef.current = null;
-    }
-
-    setScannerOpen(false);
-  };
-
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [viewPhoto, setViewPhoto] = useState<{ url: string; nombre: string } | null>(null);
-  const [filtroAsistencia, setFiltroAsistencia] = useState<'hoy' | 'caducadas'>('hoy');
   const [viewUbicacion, setViewUbicacion] = useState<{ nombre: string; direccion: string; url: string | null } | null>(null);
 
   // Guardar asistencias
@@ -291,10 +163,6 @@ export default function Attendance() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const removeJugador = (id: number) => {
-    setJugadoresIds(prev => prev.filter(jid => jid !== id));
   };
 
   if (!capitanId) {
@@ -322,25 +190,35 @@ export default function Attendance() {
         </div>
       ) : !selectedPartido ? (
         <div>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            <button className={`btn btn-sm ${filtroAsistencia === 'hoy' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFiltroAsistencia('hoy')}>Hoy</button>
-            <button className={`btn btn-sm ${filtroAsistencia === 'caducadas' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFiltroAsistencia('caducadas')}>Pasados</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className={`btn btn-sm ${filtroAsistencia === 'hoy' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setFiltroAsistencia('hoy'); setPartidosPage(1); }}>Hoy</button>
+              <button className={`btn btn-sm ${filtroAsistencia === 'caducadas' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setFiltroAsistencia('caducadas'); setPartidosPage(1); }}>Pasados</button>
+            </div>
+            {partidosPages > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button className="btn btn-sm btn-ghost" disabled={partidosPage <= 1} onClick={() => setPartidosPage(p => p - 1)}>←</button>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{partidosPage}/{partidosPages}</span>
+                <button className="btn btn-sm btn-ghost" disabled={partidosPage >= partidosPages} onClick={() => setPartidosPage(p => p + 1)}>→</button>
+              </div>
+            )}
           </div>
-          {(() => {
-            const filtrados = partidos.filter(p => {
-              if (filtroAsistencia === 'hoy') return p.es_hoy || (!p.caducado && p.asistencia_registrada);
-              return p.caducado;
-            });
-            return filtrados.length === 0 ? (
+          {partidos.length === 0 ? (
               <div className="empty-state">
                 <UserCheck size={48} />
                 <p>{filtroAsistencia === 'hoy' ? 'No hay partidos programados para hoy.' : 'No hay partidos pasados.'}</p>
               </div>
             ) : (
               <div className="card-grid">
-                {filtrados.map(p => (
-              <div key={p.id} className="card" style={{ cursor: 'pointer', borderLeft: p.asistencia_registrada ? '4px solid var(--success)' : undefined }} onClick={() => openPartido(p)}>
-                <h3 className="card-title">{getTeamName(p.equipo_local_id)} vs {getTeamName(p.equipo_visitante_id)}</h3>
+                {partidos.map(p => (
+              <div key={p.id} className="card" style={{ cursor: 'pointer', borderLeft: p.asistencia_registrada ? '4px solid var(--success)' : '4px solid var(--warning)' }} onClick={() => openPartido(p)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <img src={getFileUrl(getTeamLogo(p.equipo_local_id)) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getTeamName(p.equipo_local_id)) + '&background=3b82f6&color=fff&size=24'} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{getTeamName(p.equipo_local_id)}</span>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>vs</span>
+                  <img src={getFileUrl(getTeamLogo(p.equipo_visitante_id)) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getTeamName(p.equipo_visitante_id)) + '&background=8b5cf6&color=fff&size=24'} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{getTeamName(p.equipo_visitante_id)}</span>
+                </div>
                 <div className="card-details">
                   <p><strong>Torneo:</strong> {p.torneo_nombre}</p>
                   <p><strong>Jornada:</strong> {p.jornada_numero ? `Jornada ${p.jornada_numero}` : '—'}</p>
@@ -350,15 +228,16 @@ export default function Attendance() {
                     <button className="btn btn-sm btn-ghost" style={{ padding: 0, textDecoration: 'underline', fontSize: '0.85rem' }} onClick={(e) => { e.stopPropagation(); setViewUbicacion({ nombre: p.ubicacion_nombre!, direccion: p.ubicacion_direccion || '', url: p.ubicacion_url || null }); }}>{p.ubicacion_nombre}</button>
                   ) : '—'}</p>
                   <p><strong>Tipo:</strong> {p.tipo || '—'}</p>
-                  {p.asistencia_registrada && (
+                  {p.asistencia_registrada ? (
                     <p style={{ color: 'var(--success)', fontWeight: 600 }}>✓ Asistencia registrada</p>
+                  ) : (
+                    <p style={{ color: 'var(--warning)', fontWeight: 600 }}>⚠ Sin asistencia registrada</p>
                   )}
                 </div>
               </div>
             ))}
           </div>
-            );
-          })()}
+            )}
         </div>
       ) : (
         <div>
@@ -367,136 +246,123 @@ export default function Attendance() {
           </button>
 
           <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow)', marginBottom: '1.5rem' }}>
-            <h3 style={{ marginBottom: '0.5rem' }}>{getTeamName(selectedPartido.equipo_local_id)} vs {getTeamName(selectedPartido.equipo_visitante_id)}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', marginBottom: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
+                <img src={getFileUrl(getTeamLogo(selectedPartido.equipo_local_id)) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getTeamName(selectedPartido.equipo_local_id)) + '&background=3b82f6&color=fff&size=56'} alt="" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)' }} />
+                <strong style={{ fontSize: '0.85rem', textAlign: 'center' }}>{getTeamName(selectedPartido.equipo_local_id)}</strong>
+              </div>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', fontWeight: 700 }}>vs</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
+                <img src={getFileUrl(getTeamLogo(selectedPartido.equipo_visitante_id)) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getTeamName(selectedPartido.equipo_visitante_id)) + '&background=8b5cf6&color=fff&size=56'} alt="" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)' }} />
+                <strong style={{ fontSize: '0.85rem', textAlign: 'center' }}>{getTeamName(selectedPartido.equipo_visitante_id)}</strong>
+              </div>
+            </div>
+            <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+              J{selectedPartido.jornada_numero} · {selectedPartido.fecha_hora ? `${formatDate(selectedPartido.fecha_hora)} ${new Date(selectedPartido.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : selectedPartido.jornada_fecha ? formatDate(selectedPartido.jornada_fecha) : '—'}
+            </p>
             {miFinalizada ? (
               <p style={{ color: 'var(--success)', fontSize: '0.85rem', fontWeight: 600 }}>✓ Asistencia finalizada</p>
             ) : selectedPartido.caducado ? (
               <p style={{ color: 'var(--danger)', fontSize: '0.85rem', fontWeight: 600 }}>Este partido ya pasó, no se puede registrar asistencia.</p>
-            ) : (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Escanea o ingresa el código QR de cada jugador del equipo contrario.</p>
-            )}
+            ) : null}
           </div>
 
           {/* Registro - solo si no se ha finalizado y el partido es de hoy */}
           {!miFinalizada && !selectedPartido.caducado && (
             <>
-              <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-            <form onSubmit={handleManualSubmit} style={{ display: 'flex', gap: '0.5rem', flex: 1, minWidth: 250 }}>
-              <input
-                value={manualCode}
-                onChange={e => setManualCode(e.target.value)}
-                placeholder="Código QR del jugador..."
-                style={{ flex: 1, padding: '0.6rem 0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
-              />
-              <button type="submit" className="btn btn-primary"><Keyboard size={16} /> Agregar</button>
-            </form>
-            <button className="btn btn-secondary" onClick={startScanner}><Camera size={16} /> Escanear QR</button>
-          </div>
+              {loadingAsistencias ? (
+                <p style={{ color: 'var(--text-secondary)' }}>Cargando jugadores...</p>
+              ) : (
+              <>
+              {/* Lista de jugadores tipo WhatsApp */}
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <strong style={{ fontSize: '0.85rem' }}>Jugadores presentes</strong>
+                  <button className="btn btn-sm btn-ghost" onClick={() => {
+                    if (jugadoresIds.length === jugadoresContrario.filter((j: any) => !asistencias.some(a => a.jugador_id === j.id)).length) {
+                      setJugadoresIds([]);
+                    } else {
+                      setJugadoresIds(jugadoresContrario.filter((j: any) => !asistencias.some(a => a.jugador_id === j.id)).map((j: any) => j.id));
+                    }
+                  }}>
+                    {jugadoresIds.length === jugadoresContrario.filter((j: any) => !asistencias.some(a => a.jugador_id === j.id)).length ? 'Quitar todos' : 'Todos'}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {jugadoresContrario.filter((j: any) => !asistencias.some(a => a.jugador_id === j.id)).map((j: any) => {
+                    const selected = jugadoresIds.includes(j.id);
+                    return (
+                      <div key={j.id} onClick={() => setJugadoresIds(prev => prev.includes(j.id) ? prev.filter(id => id !== j.id) : [...prev, j.id])} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'var(--transition)', background: selected ? 'rgba(16, 185, 129, 0.06)' : 'var(--card-bg)', border: selected ? '1.5px solid var(--success)' : '1.5px solid var(--border)' }}>
+                        <img
+                          src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=44'}
+                          alt=""
+                          style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                          onClick={(e) => { e.stopPropagation(); setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=256', nombre: j.nombre }); }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontWeight: 600, fontSize: '0.9rem', lineHeight: 1.2 }}>{j.nombre}{j.es_capitan ? ' ⭐' : ''}</p>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{j.numero ? `#${j.numero}` : ''}{j.posicion ? ` · ${j.posicion}` : ''}</p>
+                        </div>
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', border: selected ? 'none' : '2px solid var(--border)', background: selected ? 'var(--success)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'var(--transition)' }}>
+                          {selected && <span style={{ color: 'white', fontSize: '0.75rem', fontWeight: 800 }}>✓</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-          {/* Jugadores pendientes de guardar */}
-          {jugadoresIds.length > 0 && (
-            <div style={{ background: 'var(--accent-light)', borderRadius: 'var(--radius-sm)', padding: '1rem', marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <strong>{jugadoresIds.length} jugador(es) a registrar</strong>
-                <button className="btn btn-sm btn-primary" onClick={() => setConfirmFinalize(true)} disabled={saving}>
-                  {saving ? 'Finalizando...' : 'Finalizar Asistencia'}
+              {/* Botón finalizar */}
+              {jugadoresIds.length > 0 && (
+                <button className="btn btn-primary" onClick={() => setConfirmFinalize(true)} disabled={saving} style={{ width: '100%', padding: '0.85rem', fontSize: '0.95rem', borderRadius: '50px', justifyContent: 'center' }}>
+                  {saving ? 'Finalizando...' : `Finalizar Asistencia (${jugadoresIds.length})`}
                 </button>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {jugadoresIds.map(id => {
-                  const j = jugadoresContrario.find((jug: any) => jug.id === id);
-                  return (
-                    <span key={id} style={{ background: 'white', padding: '0.35rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-                      <img src={getFileUrl(j?.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j?.nombre || '?') + '&background=6366f1&color=fff&size=20'} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
-                      <span>{j?.nombre || `ID ${id}`} #{j?.numero || '?'}</span>
-                      <button onClick={() => removeJugador(id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', display: 'flex' }}><X size={12} /></button>
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+              )}
+              </>
+              )}
             </>
           )}
 
-          {/* Asistencias */}
-          <h4 style={{ marginBottom: '0.75rem' }}>Asistencias</h4>
-          {loadingAsistencias ? (
-            <p style={{ color: 'var(--text-secondary)' }}>Cargando...</p>
-          ) : jugadoresContrario.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)' }}>No hay jugadores registrados.</p>
-          ) : (
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Foto</th>
-                    <th>Nombre</th>
-                    <th>#</th>
-                    <th>Hora</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...jugadoresContrario].sort((a, b) => a.id - b.id).map((j: any) => {
-                    const asistencia = asistencias.find(a => a.jugador_id === j.id);
-                    const pendiente = jugadoresIds.includes(j.id);
-                    return (
-                      <tr key={j.id} style={{ background: asistencia ? 'rgba(16, 185, 129, 0.1)' : pendiente ? 'rgba(59, 130, 246, 0.1)' : undefined }}>
-                        <td>
-                          <img
-                            src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=32'}
-                            alt=""
-                            style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }}
-                            onClick={() => setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=256', nombre: j.nombre })}
-                          />
-                        </td>
-                        <td><strong>{j.nombre}</strong>{j.es_capitan && <span style={{ fontSize: '0.7rem', verticalAlign: 'super', marginLeft: '2px' }}>⭐</span>}</td>
-                        <td>{j.numero}</td>
-                        <td>{asistencia ? new Date(asistencia.hora_registro).toLocaleTimeString() : '—'}</td>
-                        <td>
-                          {asistencia ? <span className="badge badge-active">✓ Presente</span>
-                            : pendiente ? <span className="badge badge-warning">Pendiente</span>
-                            : <span className="badge badge-inactive">Sin asistencia</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {/* Resumen de asistencias (cuando ya finalizó o caducó) */}
+          {(miFinalizada || selectedPartido.caducado) && (
+            <div style={{ marginTop: '1rem' }}>
+              {/* Equipo Local */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--accent)' }}>{getTeamName(selectedPartido.equipo_local_id)}</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  {(() => {
+                    const localAsistencias = asistencias.filter((a: any) => a.equipo_id === selectedPartido.equipo_local_id);
+                    return localAsistencias.length > 0 ? localAsistencias.map((a: any) => (
+                      <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.6rem', borderRadius: 'var(--radius-sm)', background: 'var(--success-light)' }}>
+                        <img src={getFileUrl(a.jugador_foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(a.jugador_nombre) + '&background=3b82f6&color=fff&size=28'} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => setViewPhoto({ url: getFileUrl(a.jugador_foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(a.jugador_nombre) + '&background=3b82f6&color=fff&size=256', nombre: a.jugador_nombre })} />
+                        <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: 500 }}>{a.jugador_nombre}{a.jugador_numero ? ` #${a.jugador_numero}` : ''}</span>
+                        <span style={{ color: 'var(--success)', fontSize: '0.9rem' }}>✓{a.hora_registro?.startsWith('1970') && <sup style={{ fontSize: '0.55rem', color: 'var(--text-secondary)' }}>M</sup>}</span>
+                      </div>
+                    )) : <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Sin asistencias registradas</p>;
+                  })()}
+                </div>
+              </div>
+              {/* Equipo Visitante */}
+              <div>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: '#8b5cf6' }}>{getTeamName(selectedPartido.equipo_visitante_id)}</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  {(() => {
+                    const visitanteAsistencias = asistencias.filter((a: any) => a.equipo_id === selectedPartido.equipo_visitante_id);
+                    return visitanteAsistencias.length > 0 ? visitanteAsistencias.map((a: any) => (
+                      <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.6rem', borderRadius: 'var(--radius-sm)', background: 'var(--success-light)' }}>
+                        <img src={getFileUrl(a.jugador_foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(a.jugador_nombre) + '&background=8b5cf6&color=fff&size=28'} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => setViewPhoto({ url: getFileUrl(a.jugador_foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(a.jugador_nombre) + '&background=8b5cf6&color=fff&size=256', nombre: a.jugador_nombre })} />
+                        <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: 500 }}>{a.jugador_nombre}{a.jugador_numero ? ` #${a.jugador_numero}` : ''}</span>
+                        <span style={{ color: 'var(--success)', fontSize: '0.9rem' }}>✓{a.hora_registro?.startsWith('1970') && <sup style={{ fontSize: '0.55rem', color: 'var(--text-secondary)' }}>M</sup>}</span>
+                      </div>
+                    )) : <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Sin asistencias registradas</p>;
+                  })()}
+                </div>
+              </div>
             </div>
           )}
+
         </div>
       )}
-
-      {/* Preview Jugador Modal */}
-      <Modal open={!!previewJugador} onClose={cancelPreviewJugador} title="Jugador encontrado">
-        {previewJugador && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
-            <img
-              src={getFileUrl(previewJugador.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(previewJugador.nombre) + '&background=6366f1&color=fff&size=128'}
-              alt={previewJugador.nombre}
-              style={{ width: 120, height: 120, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--accent)' }}
-            />
-            <div style={{ textAlign: 'center' }}>
-              <p style={{ fontSize: '1.2rem', fontWeight: 700 }}>{previewJugador.nombre}</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>#{previewJugador.numero} · {previewJugador.posicion}</p>
-            </div>
-            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-              <button className="btn btn-secondary" onClick={cancelPreviewJugador}>Cancelar</button>
-              <button className="btn btn-primary" onClick={confirmPreviewJugador}>Aceptar</button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Scanner Modal */}
-      <Modal open={scannerOpen} onClose={stopScanner} title="Escanear QR">
-        <div id="qr-reader" style={{ width: '100%' }} />
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={stopScanner}>Cerrar cámara</button>
-        </div>
-      </Modal>
 
       <ConfirmDialog
         open={confirmFinalize}

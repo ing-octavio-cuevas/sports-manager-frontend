@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { Trophy, Users, Calendar, ClipboardList, QrCode, LayoutGrid, List, Upload } from 'lucide-react';
+import { Trophy, Users, Calendar, ClipboardList, LayoutGrid, List, Upload } from 'lucide-react';
 import { api, getFileUrl } from '@/services/api';
 import { formatDate } from '@/utils/dateUtils';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
 import type { PartidoSet, PartidoArbitraje } from '@/types';
-import { QRCodeSVG } from 'qrcode.react';
 
 interface PartidoInfo {
   id: number;
   jornada_id: number;
+  jornada_numero: number;
   equipo_local_id: number;
   equipo_visitante_id: number;
   puntos_local: number;
@@ -31,7 +31,6 @@ interface TorneoInfo {
   equipo_nombre: string;
   jugador_id: number;
   es_capitan: boolean;
-  partidos: PartidoInfo[];
 }
 
 interface MiInformacion {
@@ -66,6 +65,10 @@ export default function MyInfo() {
 
   // Mi equipo
   const [showMiEquipo, setShowMiEquipo] = useState(false);
+  const [partidosPage, setPartidosPage] = useState(1);
+  const [partidosBuscar, setPartidosBuscar] = useState('');
+  const [partidosData, setPartidosData] = useState<{ partidos: PartidoInfo[]; total: number; pages: number }>({ partidos: [], total: 0, pages: 0 });
+  const [loadingPartidos, setLoadingPartidos] = useState(false);
   const [miEquipoJugadores, setMiEquipoJugadores] = useState<any[]>([]);
   const [loadingMiEquipo, setLoadingMiEquipo] = useState(false);
   const [editingJugador, setEditingJugador] = useState<any | null>(null);
@@ -78,8 +81,6 @@ export default function MyInfo() {
   const [equipoContrarioNombre, setEquipoContrarioNombre] = useState('');
   const [loadingContrario, setLoadingContrario] = useState(false);
 
-  // QR
-  const [viewQR, setViewQR] = useState<{ codigo: string; nombre: string } | null>(null);
   const [miEquipoView, setMiEquipoView] = useState<'table' | 'cards'>('cards');
 
   useEffect(() => {
@@ -112,6 +113,24 @@ export default function MyInfo() {
     };
     fetchInfo();
   }, []);
+
+  const fetchPartidosPaginados = async (torneoId: number, page: number, buscar?: string) => {
+    setLoadingPartidos(true);
+    try {
+      const data = await api.getMiInformacionPartidos(torneoId, page, 6, buscar || undefined);
+      setPartidosData({ partidos: data.partidos || [], total: data.total || 0, pages: data.pages || 0 });
+      // Mapear arbitrajes
+      const arbMap: Record<number, any[]> = {};
+      (data.partidos || []).forEach((p: any) => {
+        arbMap[p.id] = Array.isArray(p.arbitrajes) ? p.arbitrajes : [];
+      });
+      setPartidosArbMap(arbMap);
+    } catch {
+      setPartidosData({ partidos: [], total: 0, pages: 0 });
+    } finally {
+      setLoadingPartidos(false);
+    }
+  };
 
   const openPartidoDetail = async (p: PartidoInfo) => {
     setViewPartido(p);
@@ -154,21 +173,17 @@ export default function MyInfo() {
       setLocalTeamLogo(null);
     }
     try {
-      const [data, resumen] = await Promise.all([
-        api.getJugadores(equipoId),
-        selectedTorneo ? api.getResumenAsistencia(equipoId, selectedTorneo.torneo_id) : Promise.resolve(null),
-      ]);
-      setMiEquipoJugadores(Array.isArray(data) ? data : []);
-      // Mapear asistencia por jugador_id
-      if (resumen && Array.isArray(resumen.jugadores)) {
-        const map: Record<number, { partidos_asistidos: number; total_partidos: number; porcentaje_asistencia: number }> = {};
-        resumen.jugadores.forEach((j: any) => {
-          map[j.jugador_id] = { partidos_asistidos: j.partidos_asistidos, total_partidos: j.total_partidos, porcentaje_asistencia: j.porcentaje_asistencia };
-        });
-        setAsistenciaMap(map);
-      } else {
-        setAsistenciaMap({});
-      }
+      const data = await api.getJugadores(equipoId, selectedTorneo?.torneo_id);
+      const list = Array.isArray(data) ? data : [];
+      setMiEquipoJugadores(list);
+      // Mapear asistencia desde los campos del jugador
+      const map: Record<number, { partidos_asistidos: number; total_partidos: number; porcentaje_asistencia: number }> = {};
+      list.forEach((j: any) => {
+        if (j.porcentaje_asistencia !== null && j.porcentaje_asistencia !== undefined) {
+          map[j.id] = { partidos_asistidos: j.partidos_asistidos, total_partidos: j.total_partidos, porcentaje_asistencia: j.porcentaje_asistencia };
+        }
+      });
+      setAsistenciaMap(map);
     } catch {
       setMiEquipoJugadores([]);
       setAsistenciaMap({});
@@ -300,15 +315,19 @@ export default function MyInfo() {
   return (
     <>
     <div className="page">
+      {!selectedTorneo && (
       <div className="page-header">
         <h2>Mi Información</h2>
       </div>
+      )}
 
-      {/* Info del jugador */}
-      <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow)', marginBottom: '1.5rem' }}>
+      {/* Info del jugador - solo en home */}
+      {!selectedTorneo && (
+      <div className="player-info-card" style={{ background: 'var(--card-bg)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow)', marginBottom: '1.5rem' }}>
         <h3 style={{ marginBottom: '0.5rem' }}>{info.nombre}</h3>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{info.celular}{info.email ? ` · ${info.email}` : ''}</p>
       </div>
+      )}
 
       {/* Torneos */}
       <h3 style={{ marginBottom: '1rem' }}>Mis Torneos</h3>
@@ -320,17 +339,11 @@ export default function MyInfo() {
       ) : !selectedTorneo ? (
         <div className="card-grid">
           {[...info.torneos].filter((t, i, arr) => t.torneo_publicado && arr.findIndex(x => x.torneo_id === t.torneo_id) === i).sort((a, b) => a.torneo_id - b.torneo_id).map(t => (
-            <div key={t.torneo_id} className="card" style={{ cursor: 'pointer' }} onClick={async () => {
+            <div key={t.torneo_id} className="card" style={{ cursor: 'pointer' }} onClick={() => {
               setSelectedTorneo(t);
-              // Cargar arbitrajes de los partidos
-              const arbMap: Record<number, PartidoArbitraje[]> = {};
-              await Promise.all(t.partidos.map(async (p) => {
-                try {
-                  const arbs = await api.getArbitrajes(p.id);
-                  arbMap[p.id] = Array.isArray(arbs) ? arbs : [];
-                } catch { arbMap[p.id] = []; }
-              }));
-              setPartidosArbMap(arbMap);
+              setPartidosPage(1);
+              setPartidosBuscar('');
+              fetchPartidosPaginados(t.torneo_id, 1);
             }}>
               <div className="card-header-row">
                 <img
@@ -344,7 +357,6 @@ export default function MyInfo() {
               </div>
               <div className="card-details">
                 <p><strong>Equipo:</strong> {t.equipo_nombre}</p>
-                <p><strong>Partidos:</strong> {t.partidos.length}</p>
               </div>
             </div>
           ))}
@@ -365,7 +377,7 @@ export default function MyInfo() {
                 </p>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <div className="torneo-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <button className="btn btn-sm btn-secondary" onClick={() => openStandings(selectedTorneo.torneo_id)}>
                 <ClipboardList size={16} /> Tabla de Posiciones
               </button>
@@ -380,51 +392,61 @@ export default function MyInfo() {
             </div>
           </div>
 
-          <h4 style={{ marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Calendar size={18} /> Partidos ({selectedTorneo.partidos.length})
-          </h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Calendar size={18} /> Partidos ({partidosData.total})
+            </h4>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={partidosBuscar}
+                  onChange={e => setPartidosBuscar(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { setPartidosPage(1); fetchPartidosPaginados(selectedTorneo!.torneo_id, 1, partidosBuscar); } }}
+                  placeholder="Buscar rival..."
+                  style={{ padding: '0.3rem 0.6rem', paddingRight: partidosBuscar ? '1.5rem' : '0.6rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', width: '120px' }}
+                />
+                {partidosBuscar && (
+                  <button onClick={() => { setPartidosBuscar(''); setPartidosPage(1); fetchPartidosPaginados(selectedTorneo!.torneo_id, 1, ''); }} style={{ position: 'absolute', right: '4px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'flex', padding: '2px' }}>✕</button>
+                )}
+              </div>
+              <button className="btn btn-sm btn-ghost" disabled={partidosPage <= 1} onClick={() => { const p = partidosPage - 1; setPartidosPage(p); fetchPartidosPaginados(selectedTorneo!.torneo_id, p, partidosBuscar); }}>←</button>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{partidosPage}/{partidosData.pages || 1}</span>
+              <button className="btn btn-sm btn-ghost" disabled={partidosPage >= partidosData.pages} onClick={() => { const p = partidosPage + 1; setPartidosPage(p); fetchPartidosPaginados(selectedTorneo!.torneo_id, p, partidosBuscar); }}>→</button>
+            </div>
+          </div>
 
-          {selectedTorneo.partidos.length === 0 ? (
+          {loadingPartidos ? (
+            <p style={{ color: 'var(--text-secondary)' }}>Cargando partidos...</p>
+          ) : partidosData.partidos.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)' }}>No hay partidos programados.</p>
           ) : (
             <>
               {/* Vista cards para móvil */}
               <div className="partidos-cards-mobile">
-                {[...selectedTorneo.partidos].sort((a, b) => (b.fecha_hora || '').localeCompare(a.fecha_hora || '')).map(p => (
-                  <div key={p.id} className="card" style={{ padding: '1rem', cursor: 'pointer', background: p.estatus === 'Jugado' ? 'rgba(16, 185, 129, 0.05)' : 'rgba(245, 158, 11, 0.05)' }} onClick={() => openPartidoDetail(p)}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>J{p.jornada_id}</span>
-                      <span className={`badge badge-${p.estatus === 'Jugado' ? 'active' : 'warning'}`}>{p.estatus}</span>
+                {[...partidosData.partidos].sort((a, b) => (b.fecha_hora || '').localeCompare(a.fecha_hora || '')).map(p => (
+                  <div key={p.id} style={{ background: (() => {
+                    if (p.estatus !== 'Jugado') return 'var(--card-bg)';
+                    const miEquipoId = selectedTorneo!.equipo_id;
+                    const misPuntos = p.equipo_local_id === miEquipoId ? p.puntos_local : p.puntos_visitante;
+                    const rivalPuntos = p.equipo_local_id === miEquipoId ? p.puntos_visitante : p.puntos_local;
+                    if (misPuntos === 0 && rivalPuntos === 0) return 'rgba(100, 116, 139, 0.06)';
+                    if (misPuntos > rivalPuntos) return 'rgba(16, 185, 129, 0.08)';
+                    if (misPuntos < rivalPuntos) return 'rgba(239, 68, 68, 0.06)';
+                    return 'rgba(100, 116, 139, 0.06)';
+                  })(), borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', borderLeft: p.estatus === 'Jugado' ? '3px solid var(--success)' : '3px solid var(--warning)', padding: '0.6rem 0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>J{p.jornada_numero} · {p.fecha_hora ? formatDate(p.fecha_hora) : '—'}{p.tipo ? ` · ${p.tipo}` : ''}</span>
+                      <button className="btn btn-sm btn-ghost" style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }} onClick={() => openPartidoDetail(p)}>Ver</button>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '0.5rem', alignItems: 'center', textAlign: 'center', marginBottom: '0.75rem' }}>
-                      <div>
-                        <p style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--accent)' }}>{equiposMap[p.equipo_local_id] || `Eq. ${p.equipo_local_id}`}</p>
-                        <p style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent)' }}>{p.puntos_local}</p>
-                      </div>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>vs</span>
-                      <div>
-                        <p style={{ fontWeight: 700, fontSize: '0.85rem', color: '#8b5cf6' }}>{equiposMap[p.equipo_visitante_id] || `Eq. ${p.equipo_visitante_id}`}</p>
-                        <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#8b5cf6' }}>{p.puntos_visitante}</p>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      <span>📅 {p.fecha_hora ? formatDate(p.fecha_hora) : '—'}</span>
-                      <span>🕐 {p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                      {p.ubicacion_id && ubicacionesMap[p.ubicacion_id] && <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={(e) => { e.stopPropagation(); setViewUbicacion(ubicacionesMap[p.ubicacion_id!]); }}>📍 {ubicacionesMap[p.ubicacion_id].nombre}</span>}
-                      <span>🏷️ {p.tipo || '—'}</span>
-                      <span>
-                        💰 {(() => {
-                          const arbs = partidosArbMap[p.id] || [];
-                          const miArb = arbs.find(a => a.equipo_id === selectedTorneo.equipo_id);
-                          if (!miArb) return '—';
-                          return miArb.pagado ? '✓' : '✗';
-                        })()}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '0.4rem' }}>
+                      <p style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.8rem', color: p.puntos_local > p.puntos_visitante ? 'var(--accent)' : 'var(--text-secondary)' }}>{equiposMap[p.equipo_local_id] || 'Local'}</p>
+                      <span style={{ textAlign: 'center', fontWeight: 800, fontSize: '1rem', minWidth: '45px' }}>
+                        <span style={{ color: p.puntos_local > p.puntos_visitante ? 'var(--accent)' : 'var(--text-secondary)' }}>{p.puntos_local}</span>
+                        <span style={{ color: 'var(--text-secondary)' }}> - </span>
+                        <span style={{ color: p.puntos_visitante > p.puntos_local ? 'var(--accent)' : 'var(--text-secondary)' }}>{p.puntos_visitante}</span>
                       </span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                      <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); openEquipoContrario(p); }} title="Ver equipo rival">
-                        <Users size={14} /> Rival
-                      </button>
+                      <p style={{ textAlign: 'left', fontWeight: 700, fontSize: '0.8rem', color: p.puntos_visitante > p.puntos_local ? 'var(--accent)' : 'var(--text-secondary)' }}>{equiposMap[p.equipo_visitante_id] || 'Visitante'}</p>
                     </div>
                   </div>
                 ))}
@@ -450,9 +472,9 @@ export default function MyInfo() {
                       </tr>
                     </thead>
                     <tbody>
-                      {[...selectedTorneo.partidos].sort((a, b) => (b.fecha_hora || '').localeCompare(a.fecha_hora || '')).map(p => (
+                      {[...partidosData.partidos].sort((a, b) => (b.fecha_hora || '').localeCompare(a.fecha_hora || '')).map(p => (
                         <tr key={p.id} style={{ background: p.estatus === 'Jugado' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)', cursor: 'pointer' }} onClick={() => openPartidoDetail(p)}>
-                          <td>J{p.jornada_id}</td>
+                          <td>J{p.jornada_numero}</td>
                           <td><strong>{equiposMap[p.equipo_local_id] || `Eq. ${p.equipo_local_id}`}</strong></td>
                           <td className="text-center" style={{ fontWeight: 700 }}>{p.puntos_local} | {p.puntos_visitante}</td>
                           <td><strong>{equiposMap[p.equipo_visitante_id] || `Eq. ${p.equipo_visitante_id}`}</strong></td>
@@ -584,7 +606,6 @@ export default function MyInfo() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span className={`badge badge-${j.estatus ? 'active' : 'inactive'}`}>{j.estatus ? 'Activo' : 'Inactivo'}</span>
                       <div style={{ display: 'flex', gap: '0.25rem' }}>
-                        {j.codigo_qr && <button className="btn btn-sm btn-ghost" onClick={() => setViewQR({ codigo: j.codigo_qr, nombre: j.nombre })}><QrCode size={16} /></button>}
                         {selectedTorneo?.es_capitan && <button className="btn btn-sm btn-ghost" onClick={() => handleUploadPhoto(j.id)} title="Subir foto"><Upload size={16} /></button>}
                         {selectedTorneo?.es_capitan && <button className="btn btn-sm btn-ghost" onClick={() => openEditJugador(j)}>Editar</button>}
                         {selectedTorneo?.es_capitan && <button className="btn btn-sm btn-ghost text-danger" onClick={() => setDeleteJugadorId(j.id)}>Eliminar</button>}
@@ -605,7 +626,6 @@ export default function MyInfo() {
                       <th>Capitán</th>
                       <th>Asistencia</th>
                       <th>Estatus</th>
-                      <th>QR</th>
                       {selectedTorneo?.es_capitan && <th>Acciones</th>}
                     </tr>
                   </thead>
@@ -623,11 +643,6 @@ export default function MyInfo() {
                             : '—'}
                         </td>
                         <td><span className={`badge badge-${j.estatus ? 'active' : 'inactive'}`}>{j.estatus ? 'Activo' : 'Inactivo'}</span></td>
-                        <td className="text-center">
-                          {j.codigo_qr ? (
-                            <button className="btn btn-sm btn-ghost" onClick={() => setViewQR({ codigo: j.codigo_qr, nombre: j.nombre })} title="Ver QR"><QrCode size={16} /></button>
-                          ) : '—'}
-                        </td>
                         {selectedTorneo?.es_capitan && (
                           <td>
                             <div style={{ display: 'flex', gap: '0.25rem' }}>
@@ -863,16 +878,6 @@ export default function MyInfo() {
                 Abrir en Google Maps
               </a>
             )}
-          </div>
-        )}
-      </Modal>
-
-      {/* QR Modal */}
-      <Modal open={!!viewQR} onClose={() => setViewQR(null)} title={viewQR ? `QR — ${viewQR.nombre}` : ''}>
-        {viewQR && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem', gap: '1rem' }}>
-            <QRCodeSVG value={viewQR.codigo} size={200} />
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', wordBreak: 'break-all', textAlign: 'center' }}>{viewQR.codigo}</p>
           </div>
         )}
       </Modal>

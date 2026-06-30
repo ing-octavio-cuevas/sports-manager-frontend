@@ -8,12 +8,13 @@ interface ModalProps {
   children: ReactNode;
   wide?: boolean;
   extraWide?: boolean;
+  className?: string;
 }
 
-export default function Modal({ open, onClose, title, children, wide, extraWide }: ModalProps) {
+export default function Modal({ open, onClose, title, children, wide, extraWide, className }: ModalProps) {
   if (!open) return null;
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className={`modal-overlay ${className || ''}`} onClick={onClose}>
       <div className={`modal-content ${extraWide ? 'modal-extra-wide' : wide ? 'modal-wide' : ''}`} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{title}</h3>

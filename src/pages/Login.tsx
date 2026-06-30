@@ -93,21 +93,19 @@ export default function Login() {
         <div className="login-top-decoration" />
         <div className="login-top-bg-extra" />
         <div className="login-brand">
-          <h1>Sports Manager</h1>
+          <h1>TornealoSports.com</h1>
           <p>Gestión deportiva simplificada</p>
         </div>
       </div>
       <div className="login-brand-desktop">
-        <h1>Sports Manager</h1>
+        <h1>TornealoSports.com</h1>
         <p>Gestión deportiva simplificada</p>
       </div>
       <div className="login-bg-balls" />
       <div className="login-bg-balls-extra" />
       <div className="login-card">
         <div className="login-header">
-          <div className="login-icon">🔐</div>
           <h1>Bienvenido</h1>
-          <p>Ingresa tus datos para continuar</p>
         </div>
         <form onSubmit={handleSubmit} className="login-form">
           {error && <div className="login-error">{error}</div>}
@@ -180,7 +178,7 @@ export default function Login() {
       </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <p style={{ position: 'fixed', bottom: '1rem', left: 0, right: 0, textAlign: 'center', fontSize: '0.7rem', color: 'rgba(0,0,0,0.25)' }}>v{APP_VERSION}</p>
+      <p style={{ position: 'fixed', bottom: '1rem', left: 0, right: 0, textAlign: 'center', fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)' }}>v{APP_VERSION}</p>
     </div>
   );
 }

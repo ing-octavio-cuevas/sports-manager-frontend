@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { Plus, Edit, Trash2, Eye, Calendar, LayoutGrid, List, Share2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Calendar, LayoutGrid, List, Share2, UserCheck } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
@@ -426,6 +426,75 @@ export default function Matchdays() {
   const [sharingJornada, setSharingJornada] = useState<Matchday | null>(null);
   const [sharePartidos, setSharePartidos] = useState<Partido[]>([]);
 
+  // Asistencias manuales
+  const [asistenciaModalOpen, setAsistenciaModalOpen] = useState(false);
+  const [asistenciaPartido, setAsistenciaPartido] = useState<Partido | null>(null);
+  const [asistenciaJugadoresLocal, setAsistenciaJugadoresLocal] = useState<any[]>([]);
+  const [asistenciaJugadoresVisitante, setAsistenciaJugadoresVisitante] = useState<any[]>([]);
+  const [asistenciaRegistradas, setAsistenciaRegistradas] = useState<any[]>([]);
+  const [selectedAsistLocal, setSelectedAsistLocal] = useState<Set<number>>(new Set());
+  const [selectedAsistVisitante, setSelectedAsistVisitante] = useState<Set<number>>(new Set());
+  const [loadingAsistencia, setLoadingAsistencia] = useState(false);
+  const [savingAsistencia, setSavingAsistencia] = useState(false);
+
+  const openAsistenciaManual = async (p: Partido) => {
+    setAsistenciaPartido(p);
+    setAsistenciaModalOpen(true);
+    setLoadingAsistencia(true);
+    try {
+      const [jugLocal, jugVisitante, registradas] = await Promise.all([
+        api.getJugadores(p.equipo_local_id),
+        api.getJugadores(p.equipo_visitante_id),
+        api.getAsistenciasPartido(p.id),
+      ]);
+      const localList = Array.isArray(jugLocal) ? jugLocal.filter((j: any) => j.estatus) : [];
+      const visitanteList = Array.isArray(jugVisitante) ? jugVisitante.filter((j: any) => j.estatus) : [];
+      const regList = Array.isArray(registradas) ? registradas : [];
+      setAsistenciaJugadoresLocal(localList);
+      setAsistenciaJugadoresVisitante(visitanteList);
+      setAsistenciaRegistradas(regList);
+      // Pre-seleccionar los que ya tienen asistencia
+      setSelectedAsistLocal(new Set(regList.filter((r: any) => localList.some((j: any) => j.id === r.jugador_id)).map((r: any) => r.jugador_id)));
+      setSelectedAsistVisitante(new Set(regList.filter((r: any) => visitanteList.some((j: any) => j.id === r.jugador_id)).map((r: any) => r.jugador_id)));
+    } catch {
+      setAsistenciaJugadoresLocal([]);
+      setAsistenciaJugadoresVisitante([]);
+      setAsistenciaRegistradas([]);
+    } finally {
+      setLoadingAsistencia(false);
+    }
+  };
+
+  const handleSaveAsistenciaManual = async () => {
+    if (!asistenciaPartido) return;
+    setSavingAsistencia(true);
+    try {
+      // Nuevos a agregar (seleccionados que no estaban registrados)
+      const localIds = [...selectedAsistLocal].filter(id => !asistenciaRegistradas.some((r: any) => r.jugador_id === id));
+      const visitanteIds = [...selectedAsistVisitante].filter(id => !asistenciaRegistradas.some((r: any) => r.jugador_id === id));
+      // A eliminar (estaban registrados pero ya no están seleccionados)
+      const localToRemove = asistenciaRegistradas.filter((r: any) => asistenciaJugadoresLocal.some((j: any) => j.id === r.jugador_id) && !selectedAsistLocal.has(r.jugador_id)).map((r: any) => r.jugador_id);
+      const visitanteToRemove = asistenciaRegistradas.filter((r: any) => asistenciaJugadoresVisitante.some((j: any) => j.id === r.jugador_id) && !selectedAsistVisitante.has(r.jugador_id)).map((r: any) => r.jugador_id);
+      const toRemove = [...localToRemove, ...visitanteToRemove];
+
+      if (localIds.length > 0) {
+        await api.registrarAsistenciasManual({ partido_id: asistenciaPartido.id, equipo_id: asistenciaPartido.equipo_local_id, jugador_ids: localIds });
+      }
+      if (visitanteIds.length > 0) {
+        await api.registrarAsistenciasManual({ partido_id: asistenciaPartido.id, equipo_id: asistenciaPartido.equipo_visitante_id, jugador_ids: visitanteIds });
+      }
+      if (toRemove.length > 0) {
+        await api.eliminarAsistenciasManual({ partido_id: asistenciaPartido.id, jugador_ids: toRemove });
+      }
+      setToast({ message: 'Asistencias actualizadas correctamente', type: 'success' });
+      setAsistenciaModalOpen(false);
+    } catch (err: any) {
+      setToast({ message: err.message || 'Error al actualizar asistencias', type: 'error' });
+    } finally {
+      setSavingAsistencia(false);
+    }
+  };
+
   const openShareJornada = async (j: Matchday) => {
     setSharingJornada(j);
     try {
@@ -628,6 +697,7 @@ export default function Matchdays() {
                             <button className="btn btn-sm btn-ghost" onClick={async () => { setViewPartido(p); try { const d = await api.getSets(p.id); setViewPartidoSets(Array.isArray(d) ? d : []); } catch { setViewPartidoSets([]); } }} title="Ver"><Eye size={14} /></button>
                             {isHost && (
                               <>
+                                <button className="btn btn-sm btn-ghost" onClick={() => openAsistenciaManual(p)} title="Asistencias"><UserCheck size={14} /></button>
                                 <button className="btn btn-sm btn-ghost" onClick={() => openEditPartido(p)} title="Editar"><Edit size={14} /></button>
                                 <button className="btn btn-sm btn-ghost text-danger" onClick={() => setDeletePartidoId(p.id)} title="Eliminar"><Trash2 size={14} /></button>
                               </>
@@ -1071,6 +1141,66 @@ export default function Matchdays() {
           <button className="btn btn-secondary" onClick={() => setShareModalOpen(false)}>Cerrar</button>
           <button className="btn btn-primary" onClick={handleDownloadImage}><Share2 size={16} /> Descargar imagen</button>
         </div>
+      </Modal>
+
+      {/* Asistencia Manual Modal */}
+      <Modal open={asistenciaModalOpen} onClose={() => setAsistenciaModalOpen(false)} title="Registrar Asistencias" extraWide>
+        {loadingAsistencia ? (
+          <p>Cargando jugadores...</p>
+        ) : asistenciaPartido && (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+              {/* Equipo Local */}
+              <div>
+                <h4 style={{ marginBottom: '0.75rem', color: 'var(--accent)' }}>{getTeamName(asistenciaPartido.equipo_local_id)}</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  {asistenciaJugadoresLocal.map((j: any) => {
+                    const yaRegistrado = asistenciaRegistradas.some((r: any) => r.jugador_id === j.id);
+                    return (
+                      <label key={j.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.5rem', borderRadius: 'var(--radius-sm)', background: selectedAsistLocal.has(j.id) ? 'var(--success-light)' : 'var(--bg)', cursor: 'pointer', opacity: 1 }}>
+                        <input type="checkbox" checked={selectedAsistLocal.has(j.id)}  onChange={() => {
+                          setSelectedAsistLocal(prev => {
+                            const next = new Set(prev);
+                            if (next.has(j.id)) next.delete(j.id); else next.add(j.id);
+                            return next;
+                          });
+                        }} />
+                        <span style={{ fontSize: '0.85rem' }}>{j.nombre}{j.numero ? ` #${j.numero}` : ''}{yaRegistrado ? ' ✓' : ''}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Equipo Visitante */}
+              <div>
+                <h4 style={{ marginBottom: '0.75rem', color: '#8b5cf6' }}>{getTeamName(asistenciaPartido.equipo_visitante_id)}</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  {asistenciaJugadoresVisitante.map((j: any) => {
+                    const yaRegistrado = asistenciaRegistradas.some((r: any) => r.jugador_id === j.id);
+                    return (
+                      <label key={j.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.5rem', borderRadius: 'var(--radius-sm)', background: selectedAsistVisitante.has(j.id) ? 'var(--success-light)' : 'var(--bg)', cursor: 'pointer', opacity: 1 }}>
+                        <input type="checkbox" checked={selectedAsistVisitante.has(j.id)}  onChange={() => {
+                          setSelectedAsistVisitante(prev => {
+                            const next = new Set(prev);
+                            if (next.has(j.id)) next.delete(j.id); else next.add(j.id);
+                            return next;
+                          });
+                        }} />
+                        <span style={{ fontSize: '0.85rem' }}>{j.nombre}{j.numero ? ` #${j.numero}` : ''}{yaRegistrado ? ' ✓' : ''}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setAsistenciaModalOpen(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleSaveAsistenciaManual} disabled={savingAsistencia}>
+                {savingAsistencia ? 'Guardando...' : 'Registrar Asistencias'}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <ConfirmDialog open={!!deleteId} message="¿Eliminar esta jornada?" onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />

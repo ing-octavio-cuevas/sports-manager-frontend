@@ -118,7 +118,7 @@ export const api = {
   },
 
   // Jugadores
-  getJugadores: (equipoId: number) => get(`${BASE_URL}/jugadores?equipo_id=${equipoId}`),
+  getJugadores: (equipoId: number, torneoId?: number) => get(`${BASE_URL}/jugadores?equipo_id=${equipoId}${torneoId ? `&torneo_id=${torneoId}` : ''}`),
   createJugador: (data: any) => post(`${BASE_URL}/jugadores/`, data),
   updateJugador: (id: number, data: any) => put(`${BASE_URL}/jugadores/${id}`, data),
   async deleteJugador(id: number) { await del(`${BASE_URL}/jugadores/${id}`); },
@@ -169,14 +169,28 @@ export const api = {
   updateArbitraje: (id: number, data: any) => put(`${BASE_URL}/partido-arbitraje/${id}`, data),
 
   // Asistencias
-  getPartidosCapitan: (capitanId: number) => get(`${BASE_URL}/asistencias/capitan/${capitanId}/partidos`),
+  getPartidosCapitan: (capitanId: number, filtro?: string, page?: number, limit?: number) => {
+    const params = new URLSearchParams();
+    if (filtro) params.append('filtro', filtro);
+    if (page) params.append('page', String(page));
+    if (limit) params.append('limit', String(limit));
+    const qs = params.toString();
+    return get(`${BASE_URL}/asistencias/capitan/${capitanId}/partidos${qs ? '?' + qs : ''}`);
+  },
   getAsistenciasPartido: (partidoId: number) => get(`${BASE_URL}/asistencias/partido/${partidoId}`),
   getEstadoAsistencia: (partidoId: number) => get(`${BASE_URL}/asistencias/partido/${partidoId}/estado`),
   registrarAsistencias: (data: { partido_id: number; jugador_ids: number[]; registrado_por: number }) => post(`${BASE_URL}/asistencias`, data),
+  registrarAsistenciasManual: (data: { partido_id: number; equipo_id: number; jugador_ids: number[] }) => post(`${BASE_URL}/asistencias/manual`, data),
+  async eliminarAsistenciasManual(data: { partido_id: number; jugador_ids: number[] }) {
+    const res = await fetch(`${BASE_URL}/asistencias/manual`, { method: 'DELETE', headers: authHeaders(), body: JSON.stringify(data) });
+    if (res.status === 401) { handleUnauthorized(); throw new Error('Sesión expirada'); }
+    if (!res.ok && res.status !== 204) { const err = await res.json().catch(() => null); throw new Error(err?.detail || `Error ${res.status}`); }
+  },
   getResumenAsistencia: (equipoId: number, torneoId: number) => get(`${BASE_URL}/asistencias/equipo/${equipoId}/resumen?torneo_id=${torneoId}`),
 
   // Jugador - Mi información
   getMiInformacion: () => get(`${BASE_URL}/jugadores/mi-informacion`),
+  getMiInformacionPartidos: (torneoId: number, page: number, limit: number, buscar?: string) => get(`${BASE_URL}/jugadores/mi-informacion/partidos?torneo_id=${torneoId}&page=${page}&limit=${limit}${buscar ? `&buscar=${encodeURIComponent(buscar)}` : ''}`),
   getMiCapitan: () => get(`${BASE_URL}/jugadores/mi-capitan`),
 
   // Usuarios

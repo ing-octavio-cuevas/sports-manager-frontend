@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   Trophy, Users, Calendar, ClipboardList, Shield,
-  Menu, X, LogOut, UserCheck, User, ChevronDown, Lock
+  Menu, LogOut, UserCheck, User, ChevronDown, Lock, MoreHorizontal
 } from 'lucide-react';
 import { useState } from 'react';
 import Modal from '@/components/ui/Modal';
@@ -89,14 +89,41 @@ export default function Layout() {
     { to: '/results', label: 'Resultados', icon: <ClipboardList size={20} /> },
   ];
 
+  // Bottom nav: max 4 items visible, rest go to "more"
+  const bottomNavItems = activeRole === 'anfitrion' ? [
+    { to: '/tournaments', label: 'Torneos', icon: <Trophy size={20} /> },
+    { to: '/teams', label: 'Equipos', icon: <Users size={20} /> },
+    { to: '/matchdays', label: 'Jornadas', icon: <Calendar size={20} /> },
+    { to: '/standings', label: 'Posiciones', icon: <ClipboardList size={20} /> },
+  ] : activeRole === 'jugador' ? [
+    { to: '/my-info', label: 'Mi Info', icon: <User size={20} /> },
+    { to: '/attendance', label: 'Asistencias', icon: <UserCheck size={20} /> },
+  ] : [
+    { to: '/results', label: 'Resultados', icon: <ClipboardList size={20} /> },
+  ];
+
+  const moreNavItems = activeRole === 'anfitrion' ? [
+    { to: '/referees', label: 'Árbitros', icon: <Shield size={20} /> },
+    { to: '/results', label: 'Resultados', icon: <ClipboardList size={20} /> },
+  ] : [];
+
+  const [moreOpen, setMoreOpen] = useState(false);
+
   return (
     <div className="layout">
       {/* Mobile header */}
       <header className="mobile-header">
-        <button className="icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Menú">
-          {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
-        <h1 className="mobile-title">🏐 SportsManager</h1>
+        <h1 className="mobile-title">Tornealo Sports</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {hasMultipleRoles && (
+            <button onClick={() => setRoleDropdownOpen(!roleDropdownOpen)} style={{ background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--accent)', cursor: 'pointer' }}>
+              {roleLabels[activeRole]}
+            </button>
+          )}
+          <button className="icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Menú" style={{ color: 'var(--text-secondary)' }}>
+            <Menu size={20} />
+          </button>
+        </div>
       </header>
 
       {/* Sidebar */}
@@ -187,6 +214,41 @@ export default function Layout() {
       <main className="main-content">
         <Outlet />
       </main>
+
+      {/* Bottom Navigation (mobile) */}
+      <nav className="bottom-nav">
+        {bottomNavItems.map(item => (
+          <NavLink key={item.to} to={item.to} className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+            {item.icon}
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+        {moreNavItems.length > 0 && (
+          <button className={`bottom-nav-item ${moreOpen ? 'active' : ''}`} onClick={() => setMoreOpen(!moreOpen)}>
+            <MoreHorizontal size={20} />
+            <span>Más</span>
+          </button>
+        )}
+      </nav>
+
+      {/* More menu (mobile) */}
+      {moreOpen && (
+        <div className="bottom-nav-more-overlay" onClick={() => setMoreOpen(false)}>
+          <div className="bottom-nav-more" onClick={e => e.stopPropagation()}>
+            {moreNavItems.map(item => (
+              <NavLink key={item.to} to={item.to} className="bottom-nav-more-item" onClick={() => setMoreOpen(false)}>
+                {item.icon} <span>{item.label}</span>
+              </NavLink>
+            ))}
+            <button className="bottom-nav-more-item" onClick={() => { setMoreOpen(false); setChangePassOpen(true); }}>
+              <Lock size={20} /> <span>Cambiar contraseña</span>
+            </button>
+            <button className="bottom-nav-more-item text-danger" onClick={() => { setMoreOpen(false); handleLogout(); }}>
+              <LogOut size={20} /> <span>Cerrar sesión</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Cambiar contraseña modal */}
       <Modal open={changePassOpen} onClose={() => { setChangePassOpen(false); setNewPassword(''); setConfirmPassword(''); }} title="Cambiar contraseña">
