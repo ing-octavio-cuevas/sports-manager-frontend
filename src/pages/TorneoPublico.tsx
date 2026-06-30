@@ -57,6 +57,7 @@ interface TorneoPublicoData {
       ultimos_resultados: string[];
       racha_actual: number;
       distribucion_posiciones: Record<string, number>;
+      puntos_acumulados: number[];
     };
   }[];
 }
@@ -339,6 +340,88 @@ export default function TorneoPublico() {
                 </div>
               </div>
             </div>
+
+            {/* Sparkline de tendencia */}
+            {selectedTeam.estadisticas.ultimos_resultados?.length > 1 && (
+              <div className="td-section">
+                <h4>Tendencia</h4>
+                <svg width="100%" height="70" viewBox={`0 0 ${(selectedTeam.estadisticas.ultimos_resultados.length - 1) * 30 + 30} 70`} style={{ overflow: 'visible' }}>
+                  {(() => {
+                    const results = selectedTeam.estadisticas.ultimos_resultados;
+                    const chartW = (results.length - 1) * 30 + 30;
+                    let acc = 0;
+                    const points = results.map((r, i) => {
+                      acc += r === 'G' ? 1 : -1;
+                      return { x: i * 30 + 20, y: acc };
+                    });
+                    const maxY = Math.max(...points.map(p => Math.abs(p.y)), 1);
+                    const normalized = points.map(p => ({ x: p.x, y: 35 - (p.y / maxY) * 25 }));
+                    const pathD = normalized.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+                    return (
+                      <>
+                        {/* Eje Y */}
+                        <line x1="18" y1="8" x2="18" y2="62" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                        <text x="14" y="13" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">+</text>
+                        <text x="14" y="64" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">−</text>
+                        {/* Eje X */}
+                        <line x1="18" y1="62" x2={chartW} y2="62" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                        {normalized.filter((_, i) => i % 2 === 0).map((p, i) => (
+                          <text key={i} x={p.x} y="69" textAnchor="middle" fontSize="6" fill="rgba(255,255,255,0.3)">{i * 2 + 1}</text>
+                        ))}
+                        {/* Línea base */}
+                        <line x1="18" y1="35" x2={chartW} y2="35" stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeDasharray="4" />
+                        <path d={pathD} fill="none" stroke="url(#sparkGradPub)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        {normalized.map((p, i) => (
+                          <circle key={i} cx={p.x} cy={p.y} r="3" fill={results[i] === 'G' ? '#10b981' : '#ef4444'} />
+                        ))}
+                        <defs><linearGradient id="sparkGradPub" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#3b82f6" /></linearGradient></defs>
+                      </>
+                    );
+                  })()}
+                </svg>
+              </div>
+            )}
+
+            {/* Puntos acumulados */}
+            {selectedTeam.estadisticas.puntos_acumulados?.length > 1 && (
+              <div className="td-section">
+                <h4>Evolución de puntos</h4>
+                <svg width="100%" height="90" viewBox={`0 0 ${(selectedTeam.estadisticas.puntos_acumulados.length - 1) * 30 + 30} 90`} style={{ overflow: 'visible' }}>
+                  {(() => {
+                    const pts: number[] = selectedTeam.estadisticas.puntos_acumulados;
+                    const maxPts = Math.max(...pts, 1);
+                    const chartW = (pts.length - 1) * 30 + 30;
+                    const points = pts.map((p, i) => ({ x: i * 30 + 20, y: 72 - (p / maxPts) * 58 }));
+                    const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+                    const areaD = pathD + ` L${points[points.length - 1].x},72 L${points[0].x},72 Z`;
+                    return (
+                      <>
+                        {/* Eje Y */}
+                        <line x1="18" y1="10" x2="18" y2="72" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                        <text x="14" y="16" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">{maxPts}</text>
+                        <text x="14" y="74" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">0</text>
+                        {/* Eje X */}
+                        <line x1="18" y1="72" x2={chartW} y2="72" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                        {points.filter((_, i) => i % 2 === 0).map((p, i) => (
+                          <text key={i} x={p.x} y="82" textAnchor="middle" fontSize="7" fill="rgba(255,255,255,0.3)">J{i * 2 + 1}</text>
+                        ))}
+                        {/* Grid line */}
+                        <line x1="18" y1="40" x2={chartW} y2="40" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="3" />
+                        <path d={areaD} fill="url(#areaGradPub)" opacity="0.3" />
+                        <path d={pathD} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        {points.map((p, i) => (
+                          <g key={i}>
+                            <circle cx={p.x} cy={p.y} r="3" fill="#3b82f6" />
+                            {i === points.length - 1 && <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="9" fill="white" fontWeight="700">{pts[i]}</text>}
+                          </g>
+                        ))}
+                        <defs><linearGradient id="areaGradPub" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor="#3b82f6" /><stop offset="100%" stopColor="transparent" /></linearGradient></defs>
+                      </>
+                    );
+                  })()}
+                </svg>
+              </div>
+            )}
 
             {/* Plantilla */}
             <div className="td-section">

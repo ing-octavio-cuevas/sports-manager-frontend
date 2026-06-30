@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Trophy, Users, Calendar, ClipboardList, LayoutGrid, List, Upload } from 'lucide-react';
+import { Trophy, Users, Calendar, ClipboardList, LayoutGrid, List, Upload, UserCircle } from 'lucide-react';
 import { api, getFileUrl } from '@/services/api';
 import { formatDate } from '@/utils/dateUtils';
 import Modal from '@/components/ui/Modal';
@@ -59,6 +59,11 @@ export default function MyInfo() {
   const [showStandings, setShowStandings] = useState(false);
   const [standings, setStandings] = useState<{ equipo_id: number; equipo_nombre: string; equipo_logo: string | null; pj: number; pg: number; pp: number; sg: number; sp: number; pts: number }[]>([]);
   const [loadingStandings, setLoadingStandings] = useState(false);
+
+  // Estadísticas del equipo
+  const [showEstadisticas, setShowEstadisticas] = useState(false);
+  const [estadisticas, setEstadisticas] = useState<any>(null);
+  const [loadingEstadisticas, setLoadingEstadisticas] = useState(false);
 
   // Arbitrajes de partidos
   const [partidosArbMap, setPartidosArbMap] = useState<Record<number, PartidoArbitraje[]>>({});
@@ -160,6 +165,19 @@ export default function MyInfo() {
       setStandings([]);
     } finally {
       setLoadingStandings(false);
+    }
+  };
+
+  const openEstadisticas = async (equipoId: number, torneoId: number) => {
+    setShowEstadisticas(true);
+    setLoadingEstadisticas(true);
+    try {
+      const data = await api.getEquipoEstadisticas(equipoId, torneoId);
+      setEstadisticas(data);
+    } catch {
+      setEstadisticas(null);
+    } finally {
+      setLoadingEstadisticas(false);
     }
   };
 
@@ -323,41 +341,40 @@ export default function MyInfo() {
 
       {/* Info del jugador - solo en home */}
       {!selectedTorneo && (
-      <div className="player-info-card" style={{ background: 'var(--card-bg)', borderRadius: 'var(--radius)', padding: '1.5rem', boxShadow: 'var(--shadow)', marginBottom: '1.5rem' }}>
-        <h3 style={{ marginBottom: '0.5rem' }}>{info.nombre}</h3>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{info.celular}{info.email ? ` · ${info.email}` : ''}</p>
+      <div style={{ textAlign: 'center', padding: '2rem 1rem 1.5rem' }}>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 0.75rem' }}>
+          <UserCircle size={36} color="white" strokeWidth={1.5} />
+        </div>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.25rem' }}>{info.nombre}</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{info.celular}{info.email ? ` · ${info.email}` : ''}</p>
       </div>
       )}
 
       {/* Torneos */}
-      <h3 style={{ marginBottom: '1rem' }}>Mis Torneos</h3>
+      {!selectedTorneo && <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>Mis Torneos</p>}
       {info.torneos.length === 0 ? (
         <div className="empty-state">
           <Trophy size={48} />
           <p>No estás inscrito en ningún torneo.</p>
         </div>
       ) : !selectedTorneo ? (
-        <div className="card-grid">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {[...info.torneos].filter((t, i, arr) => t.torneo_publicado && arr.findIndex(x => x.torneo_id === t.torneo_id) === i).sort((a, b) => a.torneo_id - b.torneo_id).map(t => (
-            <div key={t.torneo_id} className="card" style={{ cursor: 'pointer' }} onClick={() => {
+            <div key={t.torneo_id} onClick={() => {
               setSelectedTorneo(t);
               setPartidosPage(1);
               setPartidosBuscar('');
               fetchPartidosPaginados(t.torneo_id, 1);
-            }}>
-              <div className="card-header-row">
-                <img
-                  src={t.torneo_logo || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(t.torneo_nombre) + '&background=3b82f6&color=fff&size=48'}
-                  alt="" className="card-logo"
-                />
-                <div>
-                  <h3 className="card-title">{t.torneo_nombre}</h3>
-                  <span className={`badge badge-active`}>{t.es_capitan ? '⭐ Capitán' : 'Jugador'}</span>
-                </div>
+            }} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--card-bg)', cursor: 'pointer', transition: 'var(--transition)' }}>
+              <img
+                src={t.torneo_logo || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(t.torneo_nombre) + '&background=3b82f6&color=fff&size=40'}
+                alt="" style={{ width: 40, height: 40, borderRadius: '10px', objectFit: 'cover' }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{t.torneo_nombre}</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t.equipo_nombre} · {t.es_capitan ? '⭐ Capitán' : 'Jugador'}</p>
               </div>
-              <div className="card-details">
-                <p><strong>Equipo:</strong> {t.equipo_nombre}</p>
-              </div>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>›</span>
             </div>
           ))}
         </div>
@@ -377,15 +394,18 @@ export default function MyInfo() {
                 </p>
               </div>
             </div>
-            <div className="torneo-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button className="btn btn-sm btn-secondary" onClick={() => openStandings(selectedTorneo.torneo_id)}>
-                <ClipboardList size={16} /> Tabla de Posiciones
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+              <button className="btn btn-sm btn-secondary" onClick={() => openStandings(selectedTorneo.torneo_id)} style={{ justifyContent: 'center' }}>
+                <ClipboardList size={16} /> Posiciones
               </button>
-              <button className="btn btn-sm btn-secondary" onClick={() => openMiEquipo(selectedTorneo.equipo_id)}>
+              <button className="btn btn-sm btn-secondary" onClick={() => openMiEquipo(selectedTorneo.equipo_id)} style={{ justifyContent: 'center' }}>
                 <Users size={16} /> Mi Equipo
               </button>
+              <button className="btn btn-sm btn-secondary" onClick={() => openEstadisticas(selectedTorneo.equipo_id, selectedTorneo.torneo_id)} style={{ justifyContent: 'center' }}>
+                📊 Estadísticas
+              </button>
               {selectedTorneo.torneo_reglamento && (
-                <a href={selectedTorneo.torneo_reglamento} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-secondary" style={{ textDecoration: 'none' }}>
+                <a href={selectedTorneo.torneo_reglamento} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-secondary" style={{ textDecoration: 'none', justifyContent: 'center' }}>
                   📄 Reglamento
                 </a>
               )}
@@ -879,6 +899,154 @@ export default function MyInfo() {
               </a>
             )}
           </div>
+        )}
+      </Modal>
+
+      {/* Estadísticas Modal */}
+      <Modal open={showEstadisticas} onClose={() => setShowEstadisticas(false)} title={`Estadísticas — ${selectedTorneo?.equipo_nombre || ''}`} wide className="modal-dark">
+        {loadingEstadisticas ? (
+          <p>Cargando estadísticas...</p>
+        ) : estadisticas ? (
+          <div className="team-dashboard" style={{ margin: '-1.5rem', borderRadius: 0 }}>
+            <div className="td-kpis">
+              <div className="td-kpi"><span className="td-kpi-icon">👥</span><span className="td-kpi-label">Jugadores</span><span className="td-kpi-value">{estadisticas.total_jugadores}</span></div>
+              <div className="td-kpi"><span className="td-kpi-icon">📅</span><span className="td-kpi-label">PJ</span><span className="td-kpi-value">{estadisticas.partidos_jugados}</span></div>
+              <div className="td-kpi td-kpi-success"><span className="td-kpi-icon">🏆</span><span className="td-kpi-label">Ganados</span><span className="td-kpi-value">{estadisticas.partidos_ganados}</span></div>
+              <div className="td-kpi td-kpi-danger"><span className="td-kpi-icon">❌</span><span className="td-kpi-label">Perdidos</span><span className="td-kpi-value">{estadisticas.partidos_perdidos}</span></div>
+              <div className="td-kpi"><span className="td-kpi-icon">⭐</span><span className="td-kpi-label">Puntos</span><span className="td-kpi-value">{estadisticas.puntos_totales}</span></div>
+            </div>
+            <div className="td-section">
+              <h4>Últimos partidos</h4>
+              <div className="td-results">
+                {(estadisticas.ultimos_resultados || []).map((r: string, i: number) => (
+                  <span key={i} className={`td-result-circle ${r === 'G' ? 'win' : 'loss'}`}>{r}</span>
+                ))}
+              </div>
+              {estadisticas.racha_actual > 0 && <p className="td-racha">🔥 Racha: {estadisticas.racha_actual} victorias</p>}
+            </div>
+            <div className="td-stats-grid" style={{ padding: '0 1.25rem', marginBottom: '1rem' }}>
+              <div className="td-section" style={{ margin: 0 }}>
+                <h4>Porcentaje de victorias</h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'center' }}>
+                  <div style={{ position: 'relative', width: 80, height: 80 }}>
+                    <svg width="80" height="80" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="12" />
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="url(#donutGrad2)" strokeWidth="12" strokeLinecap="round"
+                        strokeDasharray={`${(estadisticas.porcentaje_victorias / 100) * 251.2} 251.2`}
+                        transform="rotate(-90 50 50)" />
+                      <defs><linearGradient id="donutGrad2" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#3b82f6" /></linearGradient></defs>
+                    </svg>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: '1rem', fontWeight: 800, color: 'white' }}>{estadisticas.porcentaje_victorias.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="td-section" style={{ margin: 0 }}>
+                <h4>Promedio</h4>
+                <div className="td-promedio">
+                  <span className="td-promedio-value">{estadisticas.promedio_puntos_partido.toFixed(2)}</span>
+                  <span className="td-promedio-label">pts/partido</span>
+                </div>
+              </div>
+            </div>
+            <div className="td-section">
+              <h4>Distribución por posición</h4>
+              <div className="td-positions">
+                {Object.entries(estadisticas.distribucion_posiciones || {}).map(([pos, count]) => (
+                  <div key={pos} className="td-pos-row">
+                    <span className="td-pos-name">{pos}</span>
+                    <div className="td-pos-bar"><div style={{ width: `${((count as number) / estadisticas.total_jugadores) * 100}%` }} /></div>
+                    <span className="td-pos-count">{count as number}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Sparkline de tendencia */}
+            {estadisticas.ultimos_resultados?.length > 1 && (
+              <div className="td-section">
+                <h4>Tendencia</h4>
+                <svg width="100%" height="70" viewBox={`0 0 ${(estadisticas.ultimos_resultados.length - 1) * 30 + 30} 70`} style={{ overflow: 'visible' }}>
+                  {(() => {
+                    const results: string[] = estadisticas.ultimos_resultados;
+                    const chartW = (results.length - 1) * 30 + 30;
+                    let acc = 0;
+                    const points = results.map((r: string, i: number) => {
+                      acc += r === 'G' ? 1 : -1;
+                      return { x: i * 30 + 20, y: acc };
+                    });
+                    const maxY = Math.max(...points.map(p => Math.abs(p.y)), 1);
+                    const normalized = points.map(p => ({ x: p.x, y: 35 - (p.y / maxY) * 25 }));
+                    const pathD = normalized.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+                    return (
+                      <>
+                        {/* Eje Y */}
+                        <line x1="18" y1="8" x2="18" y2="62" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                        <text x="14" y="13" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">+</text>
+                        <text x="14" y="64" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">−</text>
+                        {/* Eje X */}
+                        <line x1="18" y1="62" x2={chartW} y2="62" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                        {normalized.filter((_, i) => i % 2 === 0).map((p, i) => (
+                          <text key={i} x={p.x} y="69" textAnchor="middle" fontSize="6" fill="rgba(255,255,255,0.3)">{i * 2 + 1}</text>
+                        ))}
+                        {/* Línea base */}
+                        <line x1="18" y1="35" x2={chartW} y2="35" stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeDasharray="4" />
+                        <path d={pathD} fill="none" stroke="url(#sparkGrad)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        {normalized.map((p, i) => (
+                          <circle key={i} cx={p.x} cy={p.y} r="3" fill={results[i] === 'G' ? '#10b981' : '#ef4444'} />
+                        ))}
+                        <defs><linearGradient id="sparkGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#3b82f6" /></linearGradient></defs>
+                      </>
+                    );
+                  })()}
+                </svg>
+              </div>
+            )}
+
+            {/* Puntos acumulados */}
+            {estadisticas.puntos_acumulados?.length > 1 && (
+              <div className="td-section">
+                <h4>Evolución de puntos</h4>
+                <svg width="100%" height="90" viewBox={`0 0 ${(estadisticas.puntos_acumulados.length - 1) * 30 + 30} 90`} style={{ overflow: 'visible' }}>
+                  {(() => {
+                    const pts: number[] = estadisticas.puntos_acumulados;
+                    const maxPts = Math.max(...pts, 1);
+                    const chartW = (pts.length - 1) * 30 + 30;
+                    const points = pts.map((p: number, i: number) => ({ x: i * 30 + 20, y: 72 - (p / maxPts) * 58 }));
+                    const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+                    const areaD = pathD + ` L${points[points.length - 1].x},72 L${points[0].x},72 Z`;
+                    return (
+                      <>
+                        {/* Eje Y */}
+                        <line x1="18" y1="10" x2="18" y2="72" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                        <text x="14" y="16" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">{maxPts}</text>
+                        <text x="14" y="74" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">0</text>
+                        {/* Eje X */}
+                        <line x1="18" y1="72" x2={chartW} y2="72" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                        {points.filter((_, i) => i % 2 === 0).map((p, i) => (
+                          <text key={i} x={p.x} y="82" textAnchor="middle" fontSize="7" fill="rgba(255,255,255,0.3)">J{i * 2 + 1}</text>
+                        ))}
+                        {/* Grid lines */}
+                        <line x1="18" y1="40" x2={chartW} y2="40" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="3" />
+                        <path d={areaD} fill="url(#areaGrad)" opacity="0.3" />
+                        <path d={pathD} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        {points.map((p, i) => (
+                          <g key={i}>
+                            <circle cx={p.x} cy={p.y} r="3" fill="#3b82f6" />
+                            {i === points.length - 1 && <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="9" fill="white" fontWeight="700">{pts[i]}</text>}
+                          </g>
+                        ))}
+                        <defs><linearGradient id="areaGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor="#3b82f6" /><stop offset="100%" stopColor="transparent" /></linearGradient></defs>
+                      </>
+                    );
+                  })()}
+                </svg>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p style={{ color: 'var(--text-secondary)' }}>No hay estadísticas disponibles.</p>
         )}
       </Modal>
 

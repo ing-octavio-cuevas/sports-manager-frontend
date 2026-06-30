@@ -183,11 +183,6 @@ export default function Attendance() {
 
       {loading ? (
         <div className="empty-state"><p>Cargando partidos...</p></div>
-      ) : partidos.length === 0 ? (
-        <div className="empty-state">
-          <UserCheck size={48} />
-          <p>No tienes partidos disponibles para registrar asistencia.</p>
-        </div>
       ) : !selectedPartido ? (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>

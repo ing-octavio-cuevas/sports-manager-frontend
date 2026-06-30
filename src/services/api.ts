@@ -103,6 +103,7 @@ export const api = {
     return get(`${BASE_URL}/equipos/${qs ? '?' + qs : ''}`);
   },
   getEquipo: (id: number) => get(`${BASE_URL}/equipos/${id}`),
+  getEquipoEstadisticas: (equipoId: number, torneoId: number) => get(`${BASE_URL}/equipos/${equipoId}/estadisticas?torneo_id=${torneoId}`),
   createEquipo: (data: any) => post(`${BASE_URL}/equipos/`, data),
   updateEquipo: (id: number, data: any) => put(`${BASE_URL}/equipos/${id}`, data),
   async deleteEquipo(id: number) { await del(`${BASE_URL}/equipos/${id}`); },
