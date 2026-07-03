@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { Plus, Edit, Trash2, Eye, MapPin, LayoutGrid, List } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, LayoutGrid, List, Info } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
@@ -18,6 +18,8 @@ interface TournamentForm {
   categoria: string;
   numero_vueltas: number;
   anfitrion_id: number;
+  fecha_inicio_asistencias: string;
+  horas_limite_asistencia: number | '';
 }
 
 interface UbicacionForm {
@@ -35,6 +37,8 @@ const emptyForm: TournamentForm = {
   categoria: '',
   numero_vueltas: 1,
   anfitrion_id: 0,
+  fecha_inicio_asistencias: '',
+  horas_limite_asistencia: '',
 };
 
 export default function Tournaments() {
@@ -97,6 +101,8 @@ export default function Tournaments() {
       categoria: t.categoria,
       numero_vueltas: t.numero_vueltas || 1,
       anfitrion_id: t.anfitrion_id,
+      fecha_inicio_asistencias: t.fecha_inicio_asistencias?.slice(0, 16) || '',
+      horas_limite_asistencia: t.horas_limite_asistencia ?? '',
     });
     setModalOpen(true);
   };
@@ -365,6 +371,24 @@ export default function Tournaments() {
           <div className="form-group">
             <label>Número de vueltas *</label>
             <input type="number" min={1} value={form.numero_vueltas} onChange={e => setForm({ ...form, numero_vueltas: Number(e.target.value) })} />
+          </div>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              Inicio cálculo asistencias (opcional)
+              <span title="Define desde qué fecha se comenzará a calcular el porcentaje de asistencias. Si se deja vacío, se calculará desde el primer partido del torneo." style={{ cursor: 'help', display: 'inline-flex' }}>
+                <Info size={15} style={{ color: 'var(--accent)' }} />
+              </span>
+            </label>
+            <input type="datetime-local" value={form.fecha_inicio_asistencias} onChange={e => setForm({ ...form, fecha_inicio_asistencias: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              Horas para registrar asistencia (opcional)
+              <span title="Cantidad de horas después de la hora del partido en las que el capitán podrá registrar asistencia. Si se deja vacío, no habrá límite de tiempo." style={{ cursor: 'help', display: 'inline-flex' }}>
+                <Info size={15} style={{ color: 'var(--accent)' }} />
+              </span>
+            </label>
+            <input type="number" min={0} step={1} value={form.horas_limite_asistencia} onChange={e => setForm({ ...form, horas_limite_asistencia: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="Ej: 2" />
           </div>
           <div className="form-group">
             <label className="checkbox-label">

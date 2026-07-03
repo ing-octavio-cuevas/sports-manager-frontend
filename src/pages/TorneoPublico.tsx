@@ -29,6 +29,7 @@ interface TorneoPublicoData {
     id: number;
     nombre: string;
     logo: string;
+    mostrar_publico: boolean;
     jugadores: {
       id: number;
       nombre: string;
@@ -36,6 +37,8 @@ interface TorneoPublicoData {
       posicion: string;
       es_capitan: boolean;
       foto: string | null;
+      estatus: boolean;
+      fecha_baja: string | null;
     }[];
     ultimas_asistencias: {
       partido_id: number;
@@ -58,11 +61,23 @@ interface TorneoPublicoData {
       racha_actual: number;
       distribucion_posiciones: Record<string, number>;
       puntos_acumulados: number[];
-    };
+    } | null;
   }[];
+  rol: {
+    jornada_numero: number;
+    jornada_fecha: string;
+    partidos: {
+      equipo_local_nombre: string;
+      equipo_visitante_nombre: string;
+      fecha_hora: string;
+      ubicacion_nombre: string | null;
+      ubicacion_direccion: string | null;
+      ubicacion_url: string | null;
+    }[];
+  } | null;
 }
 
-type Tab = 'posiciones' | 'equipos' | 'asistencias';
+type Tab = 'posiciones' | 'equipos' | 'asistencias' | 'rol';
 
 export default function TorneoPublico() {
   const { id } = useParams<{ id: string }>();
@@ -137,6 +152,9 @@ export default function TorneoPublico() {
         </button>
         <button className={`public-tab ${activeTab === 'asistencias' ? 'active' : ''}`} onClick={() => setActiveTab('asistencias')}>
           <Calendar size={16} /> Asistencias
+        </button>
+        <button className={`public-tab ${activeTab === 'rol' ? 'active' : ''}`} onClick={() => setActiveTab('rol')}>
+          <ClipboardList size={16} /> Rol
         </button>
       </div>
 
@@ -232,11 +250,13 @@ export default function TorneoPublico() {
                           <span style={{ fontWeight: 600, fontSize: '0.8rem' }}>vs {a.rival} <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 400 }}>· {a.tipo || ''}</span></span>
                           <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>J{a.jornada_numero} · {formatDate(a.fecha)} {new Date(a.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                           {a.jugadores_presentes.map(j => (
-                            <span key={j.jugador_id} style={{ background: 'var(--success-light)', color: '#065f46', padding: '0.15rem 0.4rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <img src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=10b981&color=fff&size=16'} alt="" style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=10b981&color=fff&size=256', nombre: j.nombre })} />
-                              #{j.numero} {j.nombre}{j.manual && <sup style={{ fontSize: '0.55rem', color: '#64748b', marginLeft: '2px' }}>M</sup>}
+                            <span key={j.jugador_id} style={{ background: 'var(--success-light)', color: '#065f46', padding: '0.25rem 0.5rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                              {eq.mostrar_publico && (
+                                <img src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=10b981&color=fff&size=20'} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=10b981&color=fff&size=256', nombre: j.nombre })} />
+                              )}
+                              {j.nombre.split(' ')[0]}{j.numero ? ` #${j.numero}` : ''}{j.manual && <sup style={{ fontSize: '0.55rem', color: '#64748b', marginLeft: '2px' }}>M</sup>}
                             </span>
                           ))}
                         </div>
@@ -245,6 +265,53 @@ export default function TorneoPublico() {
                     ))}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab: Rol */}
+        {activeTab === 'rol' && (
+          <div>
+            <div className="public-section-header">
+              <h2>Rol de Juegos</h2>
+            </div>
+            {!data.rol ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>No hay jornadas pendientes.</p>
+            ) : (
+              <div>
+                <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                  <p style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>Jornada {data.rol.jornada_numero}</p>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{formatDate(data.rol.jornada_fecha)}</p>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                  {(() => {
+                    let lastUbicacion: string | null | undefined = undefined;
+                    return data.rol.partidos.map((p, i) => {
+                      const showHeader = p.ubicacion_nombre !== lastUbicacion;
+                      lastUbicacion = p.ubicacion_nombre;
+                      return (
+                        <div key={i}>
+                          {showHeader && (
+                            <div style={{ padding: '0.6rem 0.75rem', background: 'var(--bg)', fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', marginTop: i > 0 ? '0.5rem' : 0 }}>
+                              📍 {p.ubicacion_nombre || 'Sin ubicación'}
+                              {p.ubicacion_direccion && <span style={{ fontWeight: 400, fontSize: '0.75rem' }}> — {p.ubicacion_direccion}</span>}
+                              {p.ubicacion_url && <a href={p.ubicacion_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: '0.5rem', fontSize: '0.7rem', color: 'var(--accent)', textDecoration: 'underline' }}>Ver mapa</a>}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', padding: '0.6rem 0.75rem', borderBottom: '1px solid var(--border)', gap: '0.5rem' }}>
+                            <span style={{ flex: 1, fontWeight: 600, fontSize: '0.85rem' }}>{p.equipo_local_nombre}</span>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>vs</span>
+                            <span style={{ flex: 1, fontWeight: 600, fontSize: '0.85rem', textAlign: 'right' }}>{p.equipo_visitante_nombre}</span>
+                            <span style={{ minWidth: 55, textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                              {p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
             )}
           </div>
@@ -264,7 +331,9 @@ export default function TorneoPublico() {
               </div>
             </div>
 
-            {/* KPIs */}
+            {/* KPIs - solo si hay estadisticas */}
+            {selectedTeam.estadisticas ? (
+            <>
             <div className="td-kpis">
               <div className="td-kpi"><span className="td-kpi-icon">👥</span><span className="td-kpi-label">Jugadores</span><span className="td-kpi-value">{selectedTeam.estadisticas.total_jugadores}</span></div>
               <div className="td-kpi"><span className="td-kpi-icon">📅</span><span className="td-kpi-label">Partidos jugados</span><span className="td-kpi-value">{selectedTeam.estadisticas.partidos_jugados}</span></div>
@@ -324,7 +393,7 @@ export default function TorneoPublico() {
                   {Object.entries(selectedTeam.estadisticas.distribucion_posiciones).map(([pos, count]) => (
                     <div key={pos} className="td-pos-row">
                       <span className="td-pos-name">{pos}</span>
-                      <div className="td-pos-bar"><div style={{ width: `${(count / selectedTeam.estadisticas.total_jugadores) * 100}%` }} /></div>
+                      <div className="td-pos-bar"><div style={{ width: `${(count / selectedTeam.estadisticas!.total_jugadores) * 100}%` }} /></div>
                       <span className="td-pos-count">{count}</span>
                     </div>
                   ))}
@@ -425,20 +494,31 @@ export default function TorneoPublico() {
 
             {/* Plantilla */}
             <div className="td-section">
-              <h4>Plantilla ({selectedTeam.jugadores.length})</h4>
+              <h4>Plantilla ({selectedTeam.jugadores.filter(j => j.estatus).length})</h4>
               <div className="td-plantilla">
                 {selectedTeam.jugadores.map(j => (
-                  <div key={j.id} className="td-player" onClick={() => setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=256', nombre: j.nombre })}>
+                  <div key={j.id} className="td-player" style={{ opacity: j.estatus ? 1 : 0.45 }} onClick={() => setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=256', nombre: j.nombre })}>
                     <div className="td-player-photo-wrap">
                       <img src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=48'} alt="" className="td-player-photo" />
                       {j.numero && <span className="td-player-number">{j.numero}</span>}
                     </div>
                     <span className="td-player-name">{j.nombre.split(' ')[0]}</span>
-                    <span className="td-player-pos">{j.posicion || '—'}</span>
+                    {!j.estatus ? (
+                      <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: 600 }}>BAJA {j.fecha_baja ? formatDate(j.fecha_baja) : ''}</span>
+                    ) : (
+                      <span className="td-player-pos">{j.posicion || '—'}</span>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
+
+            </>
+            ) : (
+              <div className="td-section" style={{ marginTop: '1rem' }}>
+                <p style={{ color: '#94a3b8', textAlign: 'center', padding: '1rem 0' }}>Este equipo tiene su perfil privado</p>
+              </div>
+            )}
 
             {/* Ranking */}
             <div className="td-section">

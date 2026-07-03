@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { Plus, Edit, Trash2, Eye, Users, LayoutGrid, List, Upload, UserPlus, QrCode } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Users, LayoutGrid, List, Upload, UserPlus, QrCode, Copy } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
@@ -44,7 +44,7 @@ const emptyForm: TeamForm = {
 const emptyPlayerForm: PlayerForm = {
   nombre: '',
   numero: 0,
-  posicion: '',
+  posicion: 'Universal',
   estatus: true,
   es_capitan: false,
   curp: '',
@@ -70,8 +70,6 @@ export default function Teams() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [viewTeam, setViewTeam] = useState<Team | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [playerCounts, setPlayerCounts] = useState<Record<number, number>>({});
-  const [teamsWithCaptain, setTeamsWithCaptain] = useState<Set<number>>(new Set());
 
   // Players state
   const [playersTeam, setPlayersTeam] = useState<Team | null>(null);
@@ -93,23 +91,6 @@ export default function Teams() {
       const data = await api.getEquipos(usuario?.anfitrion_id ? { anfitrion_id: usuario.anfitrion_id } : undefined);
       setTeams(data);
       setError(null);
-      // Cargar conteo de jugadores por equipo
-      const counts: Record<number, number> = {};
-      const withCaptain = new Set<number>();
-      await Promise.all(
-        data.map(async (t: Team) => {
-          try {
-            const jugadores = await api.getJugadores(t.id);
-            const list = Array.isArray(jugadores) ? jugadores : [];
-            counts[t.id] = list.length;
-            if (list.some((j: any) => j.es_capitan)) withCaptain.add(t.id);
-          } catch {
-            counts[t.id] = 0;
-          }
-        })
-      );
-      setPlayerCounts(counts);
-      setTeamsWithCaptain(withCaptain);
     } catch (err) {
       setError('Error al cargar los equipos');
       console.error(err);
@@ -211,13 +192,6 @@ export default function Teams() {
       const data = await api.getJugadores(playersTeam.id);
       const list = Array.isArray(data) ? data : [data];
       setPlayers(list);
-      setPlayerCounts(prev => ({ ...prev, [playersTeam.id]: list.length }));
-      // Actualizar estado de capitán
-      if (list.some((j: any) => j.es_capitan)) {
-        setTeamsWithCaptain(prev => new Set([...prev, playersTeam.id]));
-      } else {
-        setTeamsWithCaptain(prev => { const next = new Set(prev); next.delete(playersTeam.id); return next; });
-      }
     } catch {
       setPlayers([]);
     }
@@ -367,14 +341,29 @@ export default function Teams() {
     <div className="page">
       <div className="page-header">
         <h2>Equipos ({filteredTeams.length})</h2>
-        {isHost && <button className="btn btn-primary" onClick={openCreate}><Plus size={18} /> Nuevo Equipo</button>}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {isHost && selectedTournament && filteredTeams.length > 0 && (
+            <button
+              className="btn btn-sm btn-ghost"
+              title="Copiar nombres de equipos"
+              onClick={() => {
+                const nombres = filteredTeams.map(t => t.nombre).join(', ');
+                navigator.clipboard.writeText(nombres);
+                setToast({ message: 'Nombres copiados al portapapeles', type: 'success' });
+              }}
+            >
+              <Copy size={16} />
+            </button>
+          )}
+          {isHost && <button className="btn btn-primary" onClick={openCreate}><Plus size={18} /> Nuevo Equipo</button>}
+        </div>
       </div>
 
       {/* Filter + View Toggle */}
       <div className="filter-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <select value={selectedTournament} onChange={e => setSelectedTournament(e.target.value)}>
           <option value="">Todos los torneos</option>
-          {[...tournaments].sort((a, b) => a.id - b.id).map(t => <option key={t.id} value={String(t.id)}>{t.nombre}</option>)}
+          {[...tournaments].sort((a, b) => a.id - b.id).map(t => <option key={t.id} value={String(t.id)}>{t.nombre}{t.periodo ? ` · ${t.periodo}` : ''}{t.categoria ? ` · ${t.categoria}` : ''}</option>)}
         </select>
         <div style={{ display: 'flex', gap: '0.25rem' }}>
           <button className={`btn btn-sm ${viewMode === 'cards' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setViewMode('cards')} title="Vista tarjetas">
@@ -417,8 +406,8 @@ export default function Teams() {
                 <button className="btn btn-sm btn-ghost" onClick={() => openPlayers(t)}>
                   <span style={{ position: 'relative', display: 'inline-flex' }}>
                     <Users size={16} />
-                    <span style={{ position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: '50%', background: teamsWithCaptain.has(t.id) ? 'var(--success)' : 'var(--warning)' }} />
-                  </span> Jugadores ({playerCounts[t.id] ?? 0})
+                    <span style={{ position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: '50%', background: (t as any).tiene_capitan ? 'var(--success)' : 'var(--warning)' }} />
+                  </span> Jugadores ({(t as any).total_jugadores ?? 0})
                 </button>
                 <button className="btn btn-sm btn-ghost" onClick={() => setViewTeam(t)}><Eye size={16} /> Ver</button>
                 {isHost && (
@@ -467,8 +456,8 @@ export default function Teams() {
                     <button className="btn btn-sm btn-ghost" onClick={() => openPlayers(t)} title="Jugadores">
                       <span style={{ position: 'relative', display: 'inline-flex' }}>
                         <Users size={16} />
-                        <span style={{ position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: '50%', background: teamsWithCaptain.has(t.id) ? 'var(--success)' : 'var(--warning)' }} />
-                      </span> {playerCounts[t.id] ?? 0}
+                        <span style={{ position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: '50%', background: (t as any).tiene_capitan ? 'var(--success)' : 'var(--warning)' }} />
+                      </span> {(t as any).total_jugadores ?? 0}
                     </button>
                   </td>
                   <td>
@@ -494,14 +483,14 @@ export default function Teams() {
         <div className="form-stack">
           <div className="form-group">
             <label>Nombre *</label>
-            <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Ej: Golden" />
+            <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value.toUpperCase() })} placeholder="Ej: GOLDEN" />
           </div>
           {!editing && (
             <div className="form-group">
               <label>Torneo *</label>
               <select value={form.torneo_id} onChange={e => setForm({ ...form, torneo_id: Number(e.target.value) })}>
                 <option value={0}>Seleccionar...</option>
-                {[...tournaments].sort((a, b) => a.id - b.id).map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                {[...tournaments].sort((a, b) => a.id - b.id).map(t => <option key={t.id} value={t.id}>{t.nombre}{t.periodo ? ` · ${t.periodo}` : ''}{t.categoria ? ` · ${t.categoria}` : ''}</option>)}
               </select>
             </div>
           )}
@@ -687,7 +676,7 @@ export default function Teams() {
             <input value={playerForm.nombre} onChange={e => setPlayerForm({ ...playerForm, nombre: e.target.value })} placeholder="Ej: Juan Pérez" />
           </div>
           <div className="form-group">
-            <label>Número</label>
+            <label>Número (opcional)</label>
             <input
               type="text"
               inputMode="numeric"
@@ -706,13 +695,12 @@ export default function Teams() {
           <div className="form-group">
             <label>Posición (opcional)</label>
             <select value={playerForm.posicion} onChange={e => setPlayerForm({ ...playerForm, posicion: e.target.value })}>
-              <option value="">Seleccionar...</option>
-              <option value="Setter">Setter</option>
-              <option value="Libero">Líbero</option>
-              <option value="Centro">Centro</option>
-              <option value="Opuesto">Opuesto</option>
-              <option value="Punta">Punta</option>
               <option value="Universal">Universal</option>
+              <option value="Acomodador">Acomodador</option>
+              <option value="Libero">Líbero</option>
+              <option value="Central">Central</option>
+              <option value="Opuesto">Opuesto</option>
+              <option value="Banda">Banda</option>
             </select>
           </div>
           <div className="form-group">
@@ -725,7 +713,7 @@ export default function Teams() {
               Activo
             </label>
           </div>
-          {(!playersTeam || !teamsWithCaptain.has(playersTeam.id) || (editingPlayer && editingPlayer.es_capitan)) && (
+          {(!playersTeam || !(playersTeam as any).tiene_capitan || (editingPlayer && editingPlayer.es_capitan)) && (
             <div className="form-group">
               <label className="checkbox-label">
                 <input type="checkbox" checked={playerForm.es_capitan} onChange={e => setPlayerForm({ ...playerForm, es_capitan: e.target.checked })} />

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Trophy, Users, Calendar, ClipboardList, LayoutGrid, List, Upload, UserCircle } from 'lucide-react';
+import { Trophy, Users, Calendar, ClipboardList, LayoutGrid, List, UserCircle, Camera, Upload, FileText } from 'lucide-react';
 import { api, getFileUrl } from '@/services/api';
 import { formatDate } from '@/utils/dateUtils';
 import Modal from '@/components/ui/Modal';
@@ -27,6 +27,8 @@ interface TorneoInfo {
   torneo_logo: string | null;
   torneo_reglamento: string | null;
   torneo_publicado: boolean;
+  torneo_periodo: string | null;
+  torneo_categoria: string | null;
   equipo_id: number;
   equipo_nombre: string;
   jugador_id: number;
@@ -77,7 +79,7 @@ export default function MyInfo() {
   const [miEquipoJugadores, setMiEquipoJugadores] = useState<any[]>([]);
   const [loadingMiEquipo, setLoadingMiEquipo] = useState(false);
   const [editingJugador, setEditingJugador] = useState<any | null>(null);
-  const [jugadorForm, setJugadorForm] = useState({ nombre: '', numero: 0, posicion: '', estatus: true, curp: '' });
+  const [jugadorForm, setJugadorForm] = useState({ nombre: '', numero: 0, posicion: 'Universal', estatus: true, curp: '' });
   const [asistenciaMap, setAsistenciaMap] = useState<Record<number, { partidos_asistidos: number; total_partidos: number; porcentaje_asistencia: number }>>({});
 
   // Equipo contrario
@@ -187,6 +189,7 @@ export default function MyInfo() {
     try {
       const equipoData = await api.getEquipo(equipoId);
       setLocalTeamLogo(equipoData?.logo || null);
+      setMostrarPublico(equipoData?.mostrar_publico !== false);
     } catch {
       setLocalTeamLogo(null);
     }
@@ -224,6 +227,7 @@ export default function MyInfo() {
   const [viewPhoto, setViewPhoto] = useState<{ url: string; nombre: string } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [localTeamLogo, setLocalTeamLogo] = useState<string | null>(null);
+  const [mostrarPublico, setMostrarPublico] = useState(true);
 
   const handleDeleteJugador = async () => {
     if (!selectedTorneo || deleteJugadorId === null) return;
@@ -372,6 +376,7 @@ export default function MyInfo() {
               />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{t.torneo_nombre}</p>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{t.torneo_periodo}{t.torneo_categoria ? ` · ${t.torneo_categoria}` : ''}</p>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t.equipo_nombre} · {t.es_capitan ? '⭐ Capitán' : 'Jugador'}</p>
               </div>
               <span style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>›</span>
@@ -395,18 +400,18 @@ export default function MyInfo() {
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
-              <button className="btn btn-sm btn-secondary" onClick={() => openStandings(selectedTorneo.torneo_id)} style={{ justifyContent: 'center' }}>
+              <button className="btn btn-sm btn-secondary" onClick={() => openStandings(selectedTorneo.torneo_id)} style={{ justifyContent: 'center', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600 }}>
                 <ClipboardList size={16} /> Posiciones
               </button>
-              <button className="btn btn-sm btn-secondary" onClick={() => openMiEquipo(selectedTorneo.equipo_id)} style={{ justifyContent: 'center' }}>
+              <button className="btn btn-sm btn-secondary" onClick={() => openMiEquipo(selectedTorneo.equipo_id)} style={{ justifyContent: 'center', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600 }}>
                 <Users size={16} /> Mi Equipo
               </button>
-              <button className="btn btn-sm btn-secondary" onClick={() => openEstadisticas(selectedTorneo.equipo_id, selectedTorneo.torneo_id)} style={{ justifyContent: 'center' }}>
+              <button className="btn btn-sm btn-secondary" onClick={() => openEstadisticas(selectedTorneo.equipo_id, selectedTorneo.torneo_id)} style={{ justifyContent: 'center', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600 }}>
                 📊 Estadísticas
               </button>
               {selectedTorneo.torneo_reglamento && (
-                <a href={selectedTorneo.torneo_reglamento} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-secondary" style={{ textDecoration: 'none', justifyContent: 'center' }}>
-                  📄 Reglamento
+                <a href={selectedTorneo.torneo_reglamento} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-secondary" style={{ textDecoration: 'none', justifyContent: 'center', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600 }}>
+                  <FileText size={16} /> Reglamento
                 </a>
               )}
             </div>
@@ -543,19 +548,18 @@ export default function MyInfo() {
                 <input value={jugadorForm.nombre} onChange={e => { if (editingJugador === 'new') setJugadorForm({ ...jugadorForm, nombre: e.target.value }); }} placeholder="Nombre completo" disabled={editingJugador !== 'new'} style={editingJugador !== 'new' ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
               </div>
               <div className="form-group">
-                <label>Número</label>
+                <label>Número (opcional)</label>
                 <input type="text" inputMode="numeric" value={jugadorForm.numero || ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setJugadorForm({ ...jugadorForm, numero: e.target.value === '' ? 0 : Number(e.target.value) }); }} disabled={editingJugador !== 'new' && !!editingJugador?.numero} style={editingJugador !== 'new' && editingJugador?.numero ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
               </div>
               <div className="form-group">
                 <label>Posición (opcional)</label>
                 <select value={jugadorForm.posicion} onChange={e => setJugadorForm({ ...jugadorForm, posicion: e.target.value })}>
-                  <option value="">Seleccionar...</option>
-                  <option value="Setter">Setter</option>
-                  <option value="Libero">Líbero</option>
-                  <option value="Centro">Centro</option>
-                  <option value="Opuesto">Opuesto</option>
-                  <option value="Punta">Punta</option>
                   <option value="Universal">Universal</option>
+                  <option value="Acomodador">Acomodador</option>
+                  <option value="Libero">Líbero</option>
+                  <option value="Central">Central</option>
+                  <option value="Opuesto">Opuesto</option>
+                  <option value="Banda">Banda</option>
                 </select>
               </div>
               <div className="form-group">
@@ -579,7 +583,7 @@ export default function MyInfo() {
                   style={{ width: 48, height: 48, borderRadius: 'var(--radius-sm)', objectFit: 'cover', border: '1px solid var(--border)' }}
                 />
                 <label className="btn btn-sm btn-secondary" style={{ cursor: 'pointer' }}>
-                  📷 {localTeamLogo ? 'Cambiar Logo' : 'Subir Logo'}
+                  <Upload size={14} /> {localTeamLogo ? 'Cambiar Logo' : 'Subir Logo'}
                   <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file || !selectedTorneo) return;
@@ -594,9 +598,28 @@ export default function MyInfo() {
                 </label>
               </div>
             )}
+            {/* Toggle privacidad - solo capitán */}
+            {selectedTorneo?.es_capitan && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.5rem 0.75rem', background: 'var(--bg)', borderRadius: 'var(--radius-sm)' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Perfil público visible</span>
+                <label style={{ position: 'relative', display: 'inline-block', width: 40, height: 22, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={mostrarPublico} onChange={async (e) => {
+                    const val = e.target.checked;
+                    setMostrarPublico(val);
+                    try {
+                      await api.updateEquipoPrivacidad(selectedTorneo.equipo_id, val);
+                      setToast({ message: val ? 'Perfil público activado' : 'Perfil público desactivado', type: 'success' });
+                    } catch { setToast({ message: 'Error al actualizar privacidad', type: 'error' }); setMostrarPublico(!val); }
+                  }} style={{ opacity: 0, width: 0, height: 0 }} />
+                  <span style={{ position: 'absolute', inset: 0, background: mostrarPublico ? 'var(--success)' : 'var(--border)', borderRadius: 11, transition: '0.3s' }}>
+                    <span style={{ position: 'absolute', width: 18, height: 18, background: 'white', borderRadius: '50%', top: 2, left: mostrarPublico ? 20 : 2, transition: '0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                  </span>
+                </label>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               {selectedTorneo?.es_capitan ? (
-                <button className="btn btn-primary btn-sm" onClick={() => { setEditingJugador('new'); setJugadorForm({ nombre: '', numero: 0, posicion: '', estatus: true, curp: '' }); }}>
+                <button className="btn btn-primary btn-sm" onClick={() => { setEditingJugador('new'); setJugadorForm({ nombre: '', numero: 0, posicion: 'Universal', estatus: true, curp: '' }); }}>
                   + Agregar Jugador
                 </button>
               ) : <div />}
@@ -609,10 +632,10 @@ export default function MyInfo() {
               <p style={{ color: 'var(--text-secondary)' }}>No hay jugadores registrados.</p>
             ) : miEquipoView === 'cards' ? (
               <div className="card-grid">
-                {[...miEquipoJugadores].filter(j => j.estatus).sort((a, b) => a.id - b.id).map((j: any) => (
-                  <div key={j.id} className="card" style={{ padding: '1rem' }}>
+                {[...miEquipoJugadores].sort((a, b) => a.id - b.id).map((j: any) => (
+                  <div key={j.id} className="card" style={{ padding: '1rem', opacity: j.estatus ? 1 : 0.5, pointerEvents: j.estatus ? 'auto' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                      <img src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=48'} alt="" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=256', nombre: j.nombre })} />
+                      <img src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=48'} alt="" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }} />
                       <div>
                         <p style={{ fontWeight: 700, fontSize: '0.95rem' }}>{j.nombre} {j.es_capitan && '⭐'}</p>
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>#{j.numero} · {j.posicion || 'Sin posición'}</p>
@@ -624,12 +647,8 @@ export default function MyInfo() {
                       </p>
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className={`badge badge-${j.estatus ? 'active' : 'inactive'}`}>{j.estatus ? 'Activo' : 'Inactivo'}</span>
-                      <div style={{ display: 'flex', gap: '0.25rem' }}>
-                        {selectedTorneo?.es_capitan && <button className="btn btn-sm btn-ghost" onClick={() => handleUploadPhoto(j.id)} title="Subir foto"><Upload size={16} /></button>}
-                        {selectedTorneo?.es_capitan && <button className="btn btn-sm btn-ghost" onClick={() => openEditJugador(j)}>Editar</button>}
-                        {selectedTorneo?.es_capitan && <button className="btn btn-sm btn-ghost text-danger" onClick={() => setDeleteJugadorId(j.id)}>Eliminar</button>}
-                      </div>
+                      <span className={`badge badge-${j.estatus ? 'active' : 'inactive'}`}>{j.estatus ? 'Activo' : 'Baja'}</span>
+                      {j.fecha_baja && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Baja: {formatDate(j.fecha_baja)}</span>}
                     </div>
                   </div>
                 ))}
@@ -650,8 +669,8 @@ export default function MyInfo() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...miEquipoJugadores].filter(j => j.estatus).sort((a, b) => a.id - b.id).map((j: any) => (
-                      <tr key={j.id}>
+                    {[...miEquipoJugadores].sort((a, b) => a.id - b.id).map((j: any) => (
+                      <tr key={j.id} style={{ opacity: j.estatus ? 1 : 0.5 }}>
                         <td><img src={getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=32'} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => setViewPhoto({ url: getFileUrl(j.foto) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(j.nombre) + '&background=6366f1&color=fff&size=256', nombre: j.nombre })} /></td>
                         <td><strong>{j.nombre}</strong></td>
                         <td>{j.numero}</td>
@@ -662,14 +681,16 @@ export default function MyInfo() {
                             ? <span title={`${asistenciaMap[j.id].partidos_asistidos}/${asistenciaMap[j.id].total_partidos} partidos`}>{asistenciaMap[j.id].porcentaje_asistencia.toFixed(1)}%</span>
                             : '—'}
                         </td>
-                        <td><span className={`badge badge-${j.estatus ? 'active' : 'inactive'}`}>{j.estatus ? 'Activo' : 'Inactivo'}</span></td>
+                        <td><span className={`badge badge-${j.estatus ? 'active' : 'inactive'}`}>{j.estatus ? 'Activo' : 'Baja'}</span>{j.fecha_baja && <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{formatDate(j.fecha_baja)}</span>}</td>
                         {selectedTorneo?.es_capitan && (
                           <td>
-                            <div style={{ display: 'flex', gap: '0.25rem' }}>
-                              <button className="btn btn-sm btn-ghost" onClick={() => handleUploadPhoto(j.id)} title="Subir foto"><Upload size={14} /></button>
-                              <button className="btn btn-sm btn-ghost" onClick={() => openEditJugador(j)}>Editar</button>
-                              <button className="btn btn-sm btn-ghost text-danger" onClick={() => setDeleteJugadorId(j.id)}>Eliminar</button>
-                            </div>
+                            {j.estatus ? (
+                              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                <button className="btn btn-sm btn-ghost" onClick={() => handleUploadPhoto(j.id)} title="Subir foto"><Camera size={14} /> Foto</button>
+                                <button className="btn btn-sm btn-ghost" onClick={() => openEditJugador(j)}>Editar</button>
+                                <button className="btn btn-sm btn-ghost text-danger" onClick={() => setDeleteJugadorId(j.id)}>Eliminar</button>
+                              </div>
+                            ) : null}
                           </td>
                         )}
                       </tr>

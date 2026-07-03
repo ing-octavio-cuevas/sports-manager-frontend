@@ -27,6 +27,8 @@ export interface Tournament {
   anfitrion_id: number;
   anfitrion?: Anfitrion;
   ubicaciones: Ubicacion[];
+  fecha_inicio_asistencias?: string;
+  horas_limite_asistencia?: number | null;
 }
 
 export interface TournamentCreate {

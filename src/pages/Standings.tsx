@@ -78,7 +78,7 @@ export default function Standings() {
       <div className="filter-bar">
         <select value={selectedTournament} onChange={e => setSelectedTournament(e.target.value)}>
           <option value="">Seleccionar torneo...</option>
-          {[...tournaments].sort((a, b) => a.id - b.id).map(t => <option key={t.id} value={String(t.id)}>{t.nombre}</option>)}
+          {[...tournaments].sort((a, b) => a.id - b.id).map(t => <option key={t.id} value={String(t.id)}>{t.nombre}{t.periodo ? ` · ${t.periodo}` : ''}{t.categoria ? ` · ${t.categoria}` : ''}</option>)}
         </select>
       </div>
 

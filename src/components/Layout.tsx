@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
-  Trophy, Users, Calendar, ClipboardList, Shield,
+  Trophy, Users, Calendar, ClipboardList,
   Menu, LogOut, UserCheck, User, ChevronDown, Lock, MoreHorizontal
 } from 'lucide-react';
 import { useState } from 'react';
@@ -80,13 +80,10 @@ export default function Layout() {
     { to: '/teams', label: 'Equipos', icon: <Users size={20} /> },
     { to: '/matchdays', label: 'Jornadas', icon: <Calendar size={20} /> },
     { to: '/standings', label: 'Tabla de Posiciones', icon: <ClipboardList size={20} /> },
-    { to: '/referees', label: 'Árbitros', icon: <Shield size={20} /> },
-    { to: '/results', label: 'Resultados', icon: <ClipboardList size={20} /> },
   ] : activeRole === 'jugador' ? [
     { to: '/my-info', label: 'Mi Información', icon: <User size={20} /> },
     { to: '/attendance', label: 'Asistencias', icon: <UserCheck size={20} /> },
   ] : [
-    { to: '/results', label: 'Resultados', icon: <ClipboardList size={20} /> },
   ];
 
   // Bottom nav: max 4 items visible, rest go to "more"
@@ -98,14 +95,9 @@ export default function Layout() {
   ] : activeRole === 'jugador' ? [
     { to: '/my-info', label: 'Mi Info', icon: <User size={20} /> },
     { to: '/attendance', label: 'Asistencias', icon: <UserCheck size={20} /> },
-  ] : [
-    { to: '/results', label: 'Resultados', icon: <ClipboardList size={20} /> },
-  ];
-
-  const moreNavItems = activeRole === 'anfitrion' ? [
-    { to: '/referees', label: 'Árbitros', icon: <Shield size={20} /> },
-    { to: '/results', label: 'Resultados', icon: <ClipboardList size={20} /> },
   ] : [];
+
+  const moreNavItems: { to: string; label: string; icon: any }[] = [];
 
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -113,7 +105,7 @@ export default function Layout() {
     <div className="layout">
       {/* Mobile header */}
       <header className="mobile-header">
-        <h1 className="mobile-title">Tornealo Sports</h1>
+        <h1 className="mobile-title" style={{ fontFamily: "'Poppins', sans-serif" }}>Tornealo Sports</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {hasMultipleRoles && (
             <button onClick={() => setRoleDropdownOpen(!roleDropdownOpen)} style={{ background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--accent)', cursor: 'pointer' }}>
@@ -129,7 +121,7 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <h2>🏐 SportsManager</h2>
+          <h2 style={{ fontFamily: "'Poppins', sans-serif", letterSpacing: '-0.02em' }}>Tornealo Sports</h2>
         </div>
 
         {usuario && (
@@ -203,7 +195,7 @@ export default function Layout() {
           <button className="nav-link" onClick={handleLogout} style={{ width: '100%', border: 'none', background: 'none', cursor: 'pointer' }}>
             <LogOut size={20} /> <span>Cerrar sesión</span>
           </button>
-          <p style={{ textAlign: 'center', fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', marginTop: '0.5rem' }}>v1.0</p>
+          <p style={{ textAlign: 'center', fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', marginTop: '0.5rem' }}>v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</p>
         </div>
       </aside>
 

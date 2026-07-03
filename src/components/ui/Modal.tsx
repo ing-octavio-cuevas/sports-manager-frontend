@@ -1,5 +1,8 @@
+import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
+
+let modalCount = 0;
 
 interface ModalProps {
   open: boolean;
@@ -12,6 +15,20 @@ interface ModalProps {
 }
 
 export default function Modal({ open, onClose, title, children, wide, extraWide, className }: ModalProps) {
+  useEffect(() => {
+    if (open) {
+      modalCount++;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        modalCount--;
+        if (modalCount <= 0) {
+          modalCount = 0;
+          document.body.style.overflow = '';
+        }
+      };
+    }
+  }, [open]);
+
   if (!open) return null;
   return (
     <div className={`modal-overlay ${className || ''}`} onClick={onClose}>

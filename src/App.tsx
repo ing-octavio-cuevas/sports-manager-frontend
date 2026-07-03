@@ -7,12 +7,11 @@ import ChangePassword from '@/pages/ChangePassword';
 import Tournaments from '@/pages/Tournaments';
 import Teams from '@/pages/Teams';
 import Matchdays from '@/pages/Matchdays';
-import Referees from '@/pages/Referees';
-import Results from '@/pages/Results';
 import Standings from '@/pages/Standings';
 import Attendance from '@/pages/Attendance';
 import MyInfo from '@/pages/MyInfo';
 import TorneoPublico from '@/pages/TorneoPublico';
+import VersionChecker from '@/components/VersionChecker';
 
 function DefaultRedirect() {
   const { usuario } = useAuth();
@@ -34,8 +33,6 @@ function ProtectedRoutes() {
           <Route path="/tournaments" element={<Tournaments />} />
           <Route path="/teams" element={<Teams />} />
           <Route path="/matchdays" element={<Matchdays />} />
-          <Route path="/referees" element={<Referees />} />
-          <Route path="/results" element={<Results />} />
           <Route path="/standings" element={<Standings />} />
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/my-info" element={<MyInfo />} />
@@ -48,6 +45,7 @@ function ProtectedRoutes() {
 export default function App() {
   return (
     <AuthProvider>
+      <VersionChecker />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />

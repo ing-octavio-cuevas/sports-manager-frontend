@@ -104,6 +104,12 @@ export const api = {
   },
   getEquipo: (id: number) => get(`${BASE_URL}/equipos/${id}`),
   getEquipoEstadisticas: (equipoId: number, torneoId: number) => get(`${BASE_URL}/equipos/${equipoId}/estadisticas?torneo_id=${torneoId}`),
+  async updateEquipoPrivacidad(equipoId: number, mostrarPublico: boolean) {
+    const res = await fetch(`${BASE_URL}/equipos/${equipoId}/privacidad?mostrar_publico=${mostrarPublico}`, { method: 'PUT', headers: authHeaders() });
+    if (res.status === 401) { handleUnauthorized(); throw new Error('Sesión expirada'); }
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    return res.json();
+  },
   createEquipo: (data: any) => post(`${BASE_URL}/equipos/`, data),
   updateEquipo: (id: number, data: any) => put(`${BASE_URL}/equipos/${id}`, data),
   async deleteEquipo(id: number) { await del(`${BASE_URL}/equipos/${id}`); },
@@ -119,7 +125,7 @@ export const api = {
   },
 
   // Jugadores
-  getJugadores: (equipoId: number, torneoId?: number) => get(`${BASE_URL}/jugadores?equipo_id=${equipoId}${torneoId ? `&torneo_id=${torneoId}` : ''}`),
+  getJugadores: (equipoId: number, torneoId?: number, estatus?: boolean) => get(`${BASE_URL}/jugadores?equipo_id=${equipoId}${torneoId ? `&torneo_id=${torneoId}` : ''}${estatus !== undefined ? `&estatus=${estatus}` : ''}`),
   createJugador: (data: any) => post(`${BASE_URL}/jugadores/`, data),
   updateJugador: (id: number, data: any) => put(`${BASE_URL}/jugadores/${id}`, data),
   async deleteJugador(id: number) { await del(`${BASE_URL}/jugadores/${id}`); },
@@ -152,6 +158,7 @@ export const api = {
   // Partidos
   getPartidos: (torneoId: number, jornadaId: number) => get(`${BASE_URL}/partidos?torneo_id=${torneoId}&jornada_id=${jornadaId}`),
   createPartido: (data: any) => post(`${BASE_URL}/partidos/`, data),
+  createPartidosBulk: (data: { jornada_id: number; partidos: any[] }) => post(`${BASE_URL}/partidos/bulk`, data),
   updatePartido: (id: number, data: any) => put(`${BASE_URL}/partidos/${id}`, data),
   async deletePartido(id: number) { await del(`${BASE_URL}/partidos/${id}`); },
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
-import { UserCheck } from 'lucide-react';
+import { UserCheck, Clock } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
@@ -12,6 +12,8 @@ interface PartidoCapitan {
   id: number;
   torneo_id: number;
   torneo_nombre: string;
+  torneo_periodo: string;
+  torneo_categoria: string;
   jornada_id: number;
   jornada_numero: number;
   jornada_fecha: string;
@@ -24,9 +26,9 @@ interface PartidoCapitan {
   ubicacion_direccion: string | null;
   ubicacion_url: string | null;
   fecha_hora: string | null;
-  es_hoy: boolean;
-  caducado: boolean;
   asistencia_registrada: boolean;
+  estado_registro: 'pendiente' | 'abierto' | 'expirado';
+  mi_equipo_id: number;
 }
 
 interface AsistenciaRegistro {
@@ -60,7 +62,7 @@ export default function Attendance() {
   const [jugadoresIds, setJugadoresIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [capitanId, setCapitanId] = useState<number | null>(null);
-  const [filtroAsistencia, setFiltroAsistencia] = useState<'hoy' | 'caducadas'>('hoy');
+  const [filtroAsistencia, setFiltroAsistencia] = useState<'disponibles' | 'pasadas'>('disponibles');
   const [partidosPage, setPartidosPage] = useState(1);
   const [partidosPages, setPartidosPages] = useState(1);
 
@@ -82,7 +84,7 @@ export default function Attendance() {
     if (!capitanId) { setPartidos([]); setLoading(false); return; }
     setLoading(true);
     try {
-      const data = await api.getPartidosCapitan(capitanId, filtro || (filtroAsistencia === 'hoy' ? 'hoy' : 'caducados'), page || partidosPage, 6);
+      const data = await api.getPartidosCapitan(capitanId, filtro || filtroAsistencia, page || partidosPage, 6);
       setPartidos(Array.isArray(data.partidos) ? data.partidos : []);
       setPartidosPages(data.pages || 1);
     } catch (err) {
@@ -110,18 +112,10 @@ export default function Attendance() {
       const [asistData, estadoData, jugadoresData] = await Promise.all([
         api.getAsistenciasPartido(p.id),
         api.getEstadoAsistencia(p.id),
-        // Cargar jugadores de mi equipo
-        (async () => {
-          const localJugadores = await api.getJugadores(p.equipo_local_id);
-          const localList = Array.isArray(localJugadores) ? localJugadores : [];
-          const capitanEnLocal = localList.some((j: any) => j.id === capitanId);
-          const miEquipoId = capitanEnLocal ? p.equipo_local_id : p.equipo_visitante_id;
-          const miEquipoJugadores = await api.getJugadores(miEquipoId);
-          return Array.isArray(miEquipoJugadores) ? miEquipoJugadores : [];
-        })(),
+        api.getJugadores(p.mi_equipo_id, undefined, true),
       ]);
       setAsistencias(Array.isArray(asistData) ? asistData : []);
-      const jugActivos = jugadoresData.filter((j: any) => j.estatus);
+      const jugActivos = Array.isArray(jugadoresData) ? jugadoresData : [];
       setJugadoresContrario(jugActivos);
       // Pre-seleccionar todos los que no tienen asistencia
       const asistList = Array.isArray(asistData) ? asistData : [];
@@ -187,8 +181,8 @@ export default function Attendance() {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button className={`btn btn-sm ${filtroAsistencia === 'hoy' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setFiltroAsistencia('hoy'); setPartidosPage(1); }}>Hoy</button>
-              <button className={`btn btn-sm ${filtroAsistencia === 'caducadas' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setFiltroAsistencia('caducadas'); setPartidosPage(1); }}>Pasados</button>
+              <button className={`btn btn-sm ${filtroAsistencia === 'disponibles' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setFiltroAsistencia('disponibles'); setPartidosPage(1); }}>Disponibles</button>
+              <button className={`btn btn-sm ${filtroAsistencia === 'pasadas' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setFiltroAsistencia('pasadas'); setPartidosPage(1); }}>Pasadas</button>
             </div>
             {partidosPages > 1 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -201,12 +195,14 @@ export default function Attendance() {
           {partidos.length === 0 ? (
               <div className="empty-state">
                 <UserCheck size={48} />
-                <p>{filtroAsistencia === 'hoy' ? 'No hay partidos programados para hoy.' : 'No hay partidos pasados.'}</p>
+                <p>{filtroAsistencia === 'disponibles' ? 'No hay partidos disponibles.' : 'No hay partidos pasados.'}</p>
               </div>
             ) : (
               <div className="card-grid">
-                {partidos.map(p => (
-              <div key={p.id} className="card" style={{ cursor: 'pointer', borderLeft: p.asistencia_registrada ? '4px solid var(--success)' : '4px solid var(--warning)' }} onClick={() => openPartido(p)}>
+                {partidos.map(p => {
+                  const borderColor = p.asistencia_registrada ? 'var(--success)' : p.estado_registro === 'expirado' ? 'var(--danger)' : p.estado_registro === 'pendiente' ? 'var(--accent)' : 'var(--warning)';
+                  return (
+              <div key={p.id} className="card" style={{ cursor: 'pointer', borderLeft: `4px solid ${borderColor}` }} onClick={() => openPartido(p)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                   <img src={getFileUrl(getTeamLogo(p.equipo_local_id)) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getTeamName(p.equipo_local_id)) + '&background=3b82f6&color=fff&size=24'} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
                   <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{getTeamName(p.equipo_local_id)}</span>
@@ -215,7 +211,7 @@ export default function Attendance() {
                   <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{getTeamName(p.equipo_visitante_id)}</span>
                 </div>
                 <div className="card-details">
-                  <p><strong>Torneo:</strong> {p.torneo_nombre}</p>
+                  <p><strong>Torneo:</strong> {p.torneo_nombre} · {p.torneo_periodo} · {p.torneo_categoria}</p>
                   <p><strong>Jornada:</strong> {p.jornada_numero ? `Jornada ${p.jornada_numero}` : '—'}</p>
                   <p><strong>Fecha:</strong> {p.fecha_hora ? formatDate(p.fecha_hora) : p.jornada_fecha ? formatDate(p.jornada_fecha) : '—'}</p>
                   <p><strong>Hora:</strong> {p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
@@ -225,12 +221,19 @@ export default function Attendance() {
                   <p><strong>Tipo:</strong> {p.tipo || '—'}</p>
                   {p.asistencia_registrada ? (
                     <p style={{ color: 'var(--success)', fontWeight: 600 }}>✓ Asistencia registrada</p>
+                  ) : p.estado_registro === 'expirado' ? (
+                    <p style={{ color: 'var(--danger)', fontWeight: 600 }}>✗ Tiempo expirado</p>
+                  ) : p.estado_registro === 'pendiente' ? (
+                    <p style={{ color: 'var(--accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <Clock size={14} /> Aún no disponible
+                    </p>
                   ) : (
-                    <p style={{ color: 'var(--warning)', fontWeight: 600 }}>⚠ Sin asistencia registrada</p>
+                    <p style={{ color: 'var(--accent)', fontWeight: 600, background: 'rgba(59,130,246,0.08)', padding: '0.3rem 0.6rem 0.15rem', borderRadius: '20px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap', marginTop: '0.75rem' }}>📋 Registra tu asistencia →</p>
                   )}
                 </div>
               </div>
-            ))}
+                  );
+                })}
           </div>
             )}
         </div>
@@ -257,13 +260,17 @@ export default function Attendance() {
             </p>
             {miFinalizada ? (
               <p style={{ color: 'var(--success)', fontSize: '0.85rem', fontWeight: 600 }}>✓ Asistencia finalizada</p>
-            ) : selectedPartido.caducado ? (
-              <p style={{ color: 'var(--danger)', fontSize: '0.85rem', fontWeight: 600 }}>Este partido ya pasó, no se puede registrar asistencia.</p>
+            ) : selectedPartido.estado_registro === 'expirado' ? (
+              <p style={{ color: 'var(--danger)', fontSize: '0.85rem', fontWeight: 600 }}>El tiempo para registrar asistencia ha expirado.</p>
+            ) : selectedPartido.estado_registro === 'pendiente' ? (
+              <p style={{ color: 'var(--accent)', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                <Clock size={16} /> Registro aún no disponible
+              </p>
             ) : null}
           </div>
 
-          {/* Registro - solo si no se ha finalizado y el partido es de hoy */}
-          {!miFinalizada && !selectedPartido.caducado && (
+          {/* Registro - solo si no se ha finalizado y el partido está abierto */}
+          {!miFinalizada && selectedPartido.estado_registro === 'abierto' && (
             <>
               {loadingAsistencias ? (
                 <p style={{ color: 'var(--text-secondary)' }}>Cargando jugadores...</p>
@@ -318,8 +325,8 @@ export default function Attendance() {
             </>
           )}
 
-          {/* Resumen de asistencias (cuando ya finalizó o caducó) */}
-          {(miFinalizada || selectedPartido.caducado) && (
+          {/* Resumen de asistencias (cuando ya finalizó, expiró o aún no abre) */}
+          {(miFinalizada || selectedPartido.estado_registro !== 'abierto') && (
             <div style={{ marginTop: '1rem' }}>
               {/* Equipo Local */}
               <div style={{ marginBottom: '1.25rem' }}>
