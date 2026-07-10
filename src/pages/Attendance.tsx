@@ -121,7 +121,7 @@ export default function Attendance() {
       const asistList = Array.isArray(asistData) ? asistData : [];
       setJugadoresIds(jugActivos.filter((j: any) => !asistList.some((a: any) => a.jugador_id === j.id)).map((j: any) => j.id));
       // Verificar si yo ya finalicé
-      const yaFinalice = estadoData.registrado_por_local === capitanId || estadoData.registrado_por_visitante === capitanId;
+      const yaFinalice = p.asistencia_registrada || estadoData.registrado_por_local === capitanId || estadoData.registrado_por_visitante === capitanId;
       setMiFinalizada(yaFinalice);
     } catch {
       setAsistencias([]);

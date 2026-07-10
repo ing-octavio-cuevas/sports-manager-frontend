@@ -56,6 +56,7 @@ export interface Team {
   inscripcion_pagada: boolean;
   monto_pagado: number | null;
   fecha_pago_inscripcion: string | null;
+  permite_edicion_jugadores: boolean;
 }
 
 export interface TeamCreate {

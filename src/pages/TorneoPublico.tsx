@@ -549,6 +549,7 @@ export default function TorneoPublico() {
       {/* Footer */}
       <div className="public-footer">
         <a href="/login">Tornealo Sports</a>
+        <span style={{ fontSize: '0.65rem', color: '#94a3b8', marginLeft: '0.5rem' }}>v{import.meta.env.VITE_APP_VERSION}</span>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { Plus, Edit, Trash2, Eye, Calendar, LayoutGrid, List, Share2, UserCheck, Upload } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Calendar, LayoutGrid, List, Share2, UserCheck } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
@@ -216,7 +216,7 @@ export default function Matchdays() {
       puntos_visitante: p.puntos_visitante || 0,
       ubicacion_id: p.ubicacion_id || 0,
       fecha_hora: p.fecha_hora?.slice(0, 16) || (viewJornada?.fecha ? viewJornada.fecha.split('T')[0] + 'T07:00' : ''),
-      estatus: p.estatus || 'Por jugar',
+      estatus: (p.puntos_local > 0 || p.puntos_visitante > 0) ? 'Jugado' : (p.estatus || 'Por jugar'),
       tipo: p.tipo || 'Oficial',
       observaciones: p.observaciones || '',
     });
@@ -251,7 +251,7 @@ export default function Matchdays() {
         puntos_visitante: partidoForm.puntos_visitante,
         ubicacion_id: partidoForm.ubicacion_id || null,
         fecha_hora: partidoForm.fecha_hora || null,
-        estatus: partidoForm.estatus || 'Por jugar',
+        estatus: (partidoForm.puntos_local > 0 || partidoForm.puntos_visitante > 0) ? 'Jugado' : (partidoForm.estatus || 'Por jugar'),
         tipo: partidoForm.tipo || 'Oficial',
         observaciones: partidoForm.observaciones || null,
       };
@@ -444,6 +444,29 @@ export default function Matchdays() {
   const [importTipo, setImportTipo] = useState('Oficial');
   const [savingImport, setSavingImport] = useState(false);
 
+  // Historial de equipo
+  const [historialModalOpen, setHistorialModalOpen] = useState(false);
+  const [historialEquipoId, setHistorialEquipoId] = useState<number>(0);
+  const [historialPartidos, setHistorialPartidos] = useState<Partido[]>([]);
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
+  const [editFromHistorial, setEditFromHistorial] = useState(false);
+
+  const openHistorial = async (equipoId: number) => {
+    if (!torneoId || !equipoId) return;
+    setHistorialEquipoId(equipoId);
+    setHistorialModalOpen(true);
+    setLoadingHistorial(true);
+    try {
+      const data = await api.getPartidosEquipo(equipoId, torneoId);
+      const list = Array.isArray(data) ? data : [];
+      setHistorialPartidos(list);
+    } catch {
+      setHistorialPartidos([]);
+    } finally {
+      setLoadingHistorial(false);
+    }
+  };
+
   const parseImportJson = () => {
     try {
       const raw = JSON.parse(importJson);
@@ -453,17 +476,21 @@ export default function Matchdays() {
         const visitanteName = (item.visitante || '').toUpperCase().trim();
         const localTeam = tournamentTeams.find(t => t.nombre.toUpperCase() === localName);
         const visitanteTeam = tournamentTeams.find(t => t.nombre.toUpperCase() === visitanteName);
+        // Resolver cancha
+        const canchaName = (item.cancha || '').trim();
+        const ubicacion = canchaName ? ubicaciones.find(u => u.nombre.toUpperCase() === canchaName.toUpperCase()) : null;
         let error: string | undefined;
         if (!localTeam) error = `Equipo "${item.local}" no encontrado`;
         else if (!visitanteTeam) error = `Equipo "${item.visitante}" no encontrado`;
         else if (localTeam.id === visitanteTeam.id) error = 'Un equipo no puede jugar contra sí mismo';
+        else if (canchaName && !ubicacion) error = `Cancha "${item.cancha}" no encontrada`;
         return {
           local: item.local || '',
           visitante: item.visitante || '',
           fecha_hora: item.fecha_hora || '',
           equipo_local_id: localTeam?.id || 0,
           equipo_visitante_id: visitanteTeam?.id || 0,
-          ubicacion_id: 0,
+          ubicacion_id: ubicacion?.id || 0,
           tipo: importTipo,
           error,
         };
@@ -508,8 +535,8 @@ export default function Matchdays() {
     setLoadingAsistencia(true);
     try {
       const [jugLocal, jugVisitante, registradas] = await Promise.all([
-        api.getJugadores(p.equipo_local_id, undefined, true),
-        api.getJugadores(p.equipo_visitante_id, undefined, true),
+        api.getJugadores(p.equipo_local_id),
+        api.getJugadores(p.equipo_visitante_id),
         api.getAsistenciasPartido(p.id),
       ]);
       const localList = Array.isArray(jugLocal) ? jugLocal : [];
@@ -596,7 +623,11 @@ export default function Matchdays() {
       <div className="page-header">
         <h2>Jornadas</h2>
         {isHost && torneoId > 0 && (
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <select style={{ fontSize: '0.8rem', padding: '0.4rem' }} defaultValue="" onChange={e => { if (e.target.value) { openHistorial(Number(e.target.value)); e.target.value = ''; } }}>
+              <option value="" disabled>Historial equipo...</option>
+              {tournamentTeams.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            </select>
             <button className="btn btn-secondary" onClick={openCombinaciones}>Asignar pendientes</button>
             <button className="btn btn-primary" onClick={openCreate}><Plus size={18} /> Nueva Jornada</button>
           </div>
@@ -710,7 +741,7 @@ export default function Matchdays() {
             {isHost && (
               <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
                 <button className="btn btn-primary btn-sm" onClick={openCreatePartido}><Plus size={16} /> Agregar Partido</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => { setImportModalOpen(true); setImportJson(''); setImportPreview([]); }}><Upload size={16} /> Creación Avanzada</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setImportModalOpen(true); setImportJson(''); setImportPreview([]); }}>⚡ Crear con IA</button>
                 {partidos.length > 0 && (
                   <button className="btn btn-secondary btn-sm" onClick={() => viewJornada && openShareJornada(viewJornada)}><Share2 size={16} /> Compartir</button>
                 )}
@@ -797,7 +828,7 @@ export default function Matchdays() {
       </Modal>
 
       {/* Create/Edit Partido Modal */}
-      <Modal open={partidoModalOpen} onClose={() => setPartidoModalOpen(false)} title={editingPartido ? 'Editar Partido' : 'Nuevo Partido'} wide>
+      <Modal open={partidoModalOpen} onClose={() => { setPartidoModalOpen(false); if (editFromHistorial) { setEditFromHistorial(false); setHistorialModalOpen(true); } }} title={editingPartido ? 'Editar Partido' : 'Nuevo Partido'} wide>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
           {/* Columna Local */}
           <div style={{ borderRight: '1px solid var(--border)', paddingRight: '1.5rem' }}>
@@ -895,11 +926,11 @@ export default function Matchdays() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem', background: 'var(--bg)', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
               <div className="form-group">
                 <label style={{ color: 'var(--accent)', fontWeight: 700 }}>{getTeamName(editingPartido.equipo_local_id)} — Puntos</label>
-                <input type="text" inputMode="numeric" value={partidoForm.puntos_local !== null ? partidoForm.puntos_local : ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setPartidoForm({ ...partidoForm, puntos_local: e.target.value === '' ? 0 : Number(e.target.value) }); }} />
+                <input type="text" inputMode="numeric" value={partidoForm.puntos_local !== null ? partidoForm.puntos_local : ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) { const val = e.target.value === '' ? 0 : Number(e.target.value); setPartidoForm(prev => ({ ...prev, puntos_local: val, estatus: (val > 0 || prev.puntos_visitante > 0) ? 'Jugado' : prev.estatus })); } }} />
               </div>
               <div className="form-group">
                 <label style={{ color: '#8b5cf6', fontWeight: 700 }}>{getTeamName(editingPartido.equipo_visitante_id)} — Puntos</label>
-                <input type="text" inputMode="numeric" value={partidoForm.puntos_visitante !== null ? partidoForm.puntos_visitante : ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setPartidoForm({ ...partidoForm, puntos_visitante: e.target.value === '' ? 0 : Number(e.target.value) }); }} />
+                <input type="text" inputMode="numeric" value={partidoForm.puntos_visitante !== null ? partidoForm.puntos_visitante : ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) { const val = e.target.value === '' ? 0 : Number(e.target.value); setPartidoForm(prev => ({ ...prev, puntos_visitante: val, estatus: (prev.puntos_local > 0 || val > 0) ? 'Jugado' : prev.estatus })); } }} />
               </div>
             </div>
 
@@ -1021,7 +1052,7 @@ export default function Matchdays() {
         )}
 
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => setPartidoModalOpen(false)}>Cancelar</button>
+          <button className="btn btn-secondary" onClick={() => { setPartidoModalOpen(false); if (editFromHistorial) { setEditFromHistorial(false); setHistorialModalOpen(true); } }}>Cancelar</button>
           <button className="btn btn-primary" onClick={handleSavePartido} disabled={savingPartido}>
             {savingPartido ? 'Guardando...' : editingPartido ? 'Guardar cambios' : 'Crear partido'}
           </button>
@@ -1304,15 +1335,34 @@ export default function Matchdays() {
         <div>
           {importPreview.length === 0 ? (
             <>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                Pega un JSON con el siguiente formato:
+              <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)', borderRadius: 'var(--radius)', color: 'white' }}>
+                <p style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.5rem' }}>📋 Prompt para IA</p>
+                <p style={{ fontSize: '0.7rem', marginBottom: '0.5rem', opacity: 0.9 }}>Copia este texto y pégalo en ChatGPT junto con la imagen del rol:</p>
+                <div style={{ position: 'relative' }}>
+                  <pre style={{ background: 'rgba(0,0,0,0.3)', padding: '0.6rem', borderRadius: '8px', fontSize: '0.65rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 120, overflowY: 'auto', margin: 0 }}>
+{`Con base en la siguiente imagen, regrésame un JSON con esta estructura:
+[
+  { "local": "EQUIPO1", "visitante": "EQUIPO2", "fecha_hora": "2026-07-05T18:00:00", "cancha": "Cancha 1" }
+]
+Mapea los nombres de equipos a esta lista oficial:
+${tournamentTeams.map(t => t.nombre).join(', ')}
+Mapea las canchas a esta lista oficial:
+${ubicaciones.map(u => u.nombre).join(', ')}`}
+                  </pre>
+                  <button
+                    style={{ position: 'absolute', top: '0.4rem', right: '0.4rem', padding: '0.25rem 0.5rem', borderRadius: '12px', border: 'none', background: 'rgba(255,255,255,0.9)', color: '#3b82f6', fontWeight: 700, fontSize: '0.65rem', cursor: 'pointer' }}
+                    onClick={() => {
+                      const prompt = `Con base en la siguiente imagen, regrésame un JSON con esta estructura:\n[\n  { "local": "EQUIPO1", "visitante": "EQUIPO2", "fecha_hora": "2026-07-05T18:00:00", "cancha": "Cancha 1" }\n]\nMapea los nombres de equipos a esta lista oficial:\n${tournamentTeams.map(t => t.nombre).join(', ')}\nMapea las canchas a esta lista oficial:\n${ubicaciones.map(u => u.nombre).join(', ')}`;
+                      navigator.clipboard.writeText(prompt);
+                      setToast({ message: 'Prompt copiado', type: 'success' });
+                    }}
+                  >Copiar</button>
+                </div>
+              </div>
+
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                Pega aquí el JSON que te devolvió la IA:
               </p>
-              <pre style={{ background: 'var(--bg)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', marginBottom: '1rem', overflowX: 'auto' }}>
-{`[
-  { "local": "HALCONES", "visitante": "ÁGUILAS", "fecha_hora": "2026-07-05T18:00:00" },
-  { "local": "PIRATAS", "visitante": "TIGRES", "fecha_hora": "2026-07-05T19:00:00" }
-]`}
-              </pre>
               <textarea
                 value={importJson}
                 onChange={e => setImportJson(e.target.value)}
@@ -1345,37 +1395,55 @@ export default function Matchdays() {
                       <th>#</th>
                       <th>Local</th>
                       <th>Visitante</th>
-                      <th>Fecha/Hora</th>
+                      <th>Hora</th>
                       <th>Cancha</th>
                       <th>Estado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {importPreview.map((p, i) => (
-                      <tr key={i} style={{ background: p.error ? 'rgba(239,68,68,0.08)' : undefined }}>
-                        <td>{i + 1}</td>
-                        <td><strong>{p.local}</strong></td>
-                        <td><strong>{p.visitante}</strong></td>
-                        <td>{p.fecha_hora ? `${formatDate(p.fecha_hora)} ${new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '—'}</td>
-                        <td>
-                          <select
-                            value={p.ubicacion_id}
-                            onChange={e => setImportPreview(prev => prev.map((item, idx) => idx === i ? { ...item, ubicacion_id: Number(e.target.value) } : item))}
-                            style={{ fontSize: '0.8rem', padding: '0.3rem' }}
-                          >
-                            <option value={0}>Sin asignar</option>
-                            {ubicaciones.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                          </select>
-                        </td>
-                        <td>
-                          {p.error ? (
-                            <span style={{ color: 'var(--danger)', fontSize: '0.75rem' }}>⚠ {p.error}</span>
-                          ) : (
-                            <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>✓ OK</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {(() => {
+                      const sorted = [...importPreview].map((p, origIdx) => ({ ...p, origIdx })).sort((a, b) => a.ubicacion_id - b.ubicacion_id);
+                      let lastUbicacionId = -1;
+                      return sorted.map((p, i) => {
+                        const showHeader = p.ubicacion_id !== lastUbicacionId;
+                        lastUbicacionId = p.ubicacion_id;
+                        const ubicNombre = p.ubicacion_id ? ubicaciones.find(u => u.id === p.ubicacion_id)?.nombre || 'Sin asignar' : 'Sin asignar';
+                        return (
+                          <React.Fragment key={i}>
+                            {showHeader && (
+                              <tr>
+                                <td colSpan={6} style={{ background: 'var(--bg)', padding: '0.5rem 0.75rem', fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-secondary)', borderBottom: '2px solid var(--border)' }}>
+                                  📍 {ubicNombre}
+                                </td>
+                              </tr>
+                            )}
+                            <tr style={{ background: p.error ? 'rgba(239,68,68,0.08)' : undefined }}>
+                              <td>{p.origIdx + 1}</td>
+                              <td><strong>{p.local}</strong></td>
+                              <td><strong>{p.visitante}</strong></td>
+                              <td>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                              <td>
+                                <select
+                                  value={p.ubicacion_id}
+                                  onChange={e => setImportPreview(prev => prev.map((item, idx) => idx === p.origIdx ? { ...item, ubicacion_id: Number(e.target.value) } : item))}
+                                  style={{ fontSize: '0.8rem', padding: '0.3rem' }}
+                                >
+                                  <option value={0}>Sin asignar</option>
+                                  {ubicaciones.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                                </select>
+                              </td>
+                              <td>
+                                {p.error ? (
+                                  <span style={{ color: 'var(--danger)', fontSize: '0.75rem' }}>⚠ {p.error}</span>
+                                ) : (
+                                  <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>✓ OK</span>
+                                )}
+                              </td>
+                            </tr>
+                          </React.Fragment>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -1390,6 +1458,52 @@ export default function Matchdays() {
             </>
           )}
         </div>
+      </Modal>
+
+      {/* Historial de Equipo Modal */}
+      <Modal open={historialModalOpen} onClose={() => setHistorialModalOpen(false)} title={`Historial — ${getTeamName(historialEquipoId)}`} extraWide>
+        {loadingHistorial ? (
+          <p>Cargando partidos...</p>
+        ) : historialPartidos.length === 0 ? (
+          <p style={{ color: 'var(--text-secondary)' }}>No hay partidos registrados para este equipo.</p>
+        ) : (
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Jornada</th>
+                  <th>Local</th>
+                  <th>Pts</th>
+                  <th></th>
+                  <th>Pts</th>
+                  <th>Visitante</th>
+                  <th>Fecha/Hora</th>
+                  <th>Estatus</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historialPartidos.map(p => (
+                  <tr key={p.id} style={{ background: p.estatus === 'Jugado' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)' }}>
+                    <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>J{(p as any).jornada_numero || '—'}</td>
+                    <td><strong>{getTeamName(p.equipo_local_id)}</strong></td>
+                    <td className="text-center" style={{ fontWeight: 700, color: 'var(--accent)' }}>{p.puntos_local}</td>
+                    <td className="text-center" style={{ color: 'var(--text-secondary)' }}>|</td>
+                    <td className="text-center" style={{ fontWeight: 700, color: '#8b5cf6' }}>{p.puntos_visitante}</td>
+                    <td><strong>{getTeamName(p.equipo_visitante_id)}</strong></td>
+                    <td style={{ fontSize: '0.8rem' }}>{p.fecha_hora ? `${formatDate(p.fecha_hora)} ${new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '—'}</td>
+                    <td><span className={`badge badge-${p.estatus === 'Jugado' ? 'active' : 'warning'}`}>{p.estatus || '—'}</span></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        <button className="btn btn-sm btn-ghost" onClick={() => { setEditFromHistorial(true); setHistorialModalOpen(false); openEditPartido(p); }} title="Editar"><Edit size={14} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Modal>
 
       <ConfirmDialog open={!!deleteId} message="¿Eliminar esta jornada?" onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />

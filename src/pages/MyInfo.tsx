@@ -33,6 +33,7 @@ interface TorneoInfo {
   equipo_nombre: string;
   jugador_id: number;
   es_capitan: boolean;
+  permite_edicion_jugadores: boolean;
 }
 
 interface MiInformacion {
@@ -213,9 +214,19 @@ export default function MyInfo() {
     }
   };
 
-  const openEditJugador = (j: any) => {
+  const openEditJugador = async (j: any) => {
     setEditingJugador(j);
     setJugadorForm({ nombre: j.nombre, numero: j.numero, posicion: j.posicion, estatus: j.estatus, curp: j.curp || '' });
+    // Refrescar permiso de edición
+    if (selectedTorneo) {
+      try {
+        const equipos = await api.getEquipos({ torneo_id: selectedTorneo.torneo_id });
+        const miEquipo = (Array.isArray(equipos) ? equipos : []).find((e: any) => e.id === selectedTorneo.equipo_id);
+        if (miEquipo && selectedTorneo.permite_edicion_jugadores !== miEquipo.permite_edicion_jugadores) {
+          setSelectedTorneo({ ...selectedTorneo, permite_edicion_jugadores: miEquipo.permite_edicion_jugadores });
+        }
+      } catch { /* silencioso */ }
+    }
   };
 
   // Eliminar jugador
@@ -415,6 +426,21 @@ export default function MyInfo() {
                 </a>
               )}
             </div>
+
+            {selectedTorneo.es_capitan && (
+              <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)', borderRadius: 'var(--radius)', color: 'white' }}>
+                <p style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.5rem' }}>📢 ¡Comparte el torneo con tu equipo!</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    readOnly
+                    value={`${window.location.origin}/torneo/${selectedTorneo.torneo_id}`}
+                    style={{ flex: 1, padding: '0.4rem 0.6rem', border: 'none', borderRadius: '20px', fontSize: '0.75rem', background: 'rgba(255,255,255,0.9)', color: '#1e293b', fontWeight: 500 }}
+                    onClick={e => (e.target as HTMLInputElement).select()}
+                  />
+                  <button style={{ padding: '0.4rem 0.75rem', borderRadius: '20px', border: 'none', background: 'white', color: '#3b82f6', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer' }} onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/torneo/${selectedTorneo.torneo_id}`); setToast({ message: 'Link copiado', type: 'success' }); }}>Copiar</button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -545,11 +571,11 @@ export default function MyInfo() {
             <div className="form-stack">
               <div className="form-group">
                 <label>Nombre *</label>
-                <input value={jugadorForm.nombre} onChange={e => { if (editingJugador === 'new') setJugadorForm({ ...jugadorForm, nombre: e.target.value }); }} placeholder="Nombre completo" disabled={editingJugador !== 'new'} style={editingJugador !== 'new' ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
+                <input value={jugadorForm.nombre} onChange={e => { const canEdit = editingJugador === 'new' || selectedTorneo?.permite_edicion_jugadores; if (canEdit) { const v = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, ''); setJugadorForm({ ...jugadorForm, nombre: v }); } }} placeholder="Nombre completo" disabled={editingJugador !== 'new' && !selectedTorneo?.permite_edicion_jugadores} style={editingJugador !== 'new' && !selectedTorneo?.permite_edicion_jugadores ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
               </div>
               <div className="form-group">
-                <label>Número (opcional)</label>
-                <input type="text" inputMode="numeric" value={jugadorForm.numero || ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setJugadorForm({ ...jugadorForm, numero: e.target.value === '' ? 0 : Number(e.target.value) }); }} disabled={editingJugador !== 'new' && !!editingJugador?.numero} style={editingJugador !== 'new' && editingJugador?.numero ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
+                <label>Número en playera (opcional)</label>
+                <input type="text" inputMode="numeric" value={jugadorForm.numero || ''} onChange={e => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setJugadorForm({ ...jugadorForm, numero: e.target.value === '' ? 0 : Number(e.target.value) }); }} disabled={editingJugador !== 'new' && !!editingJugador?.numero && !selectedTorneo?.permite_edicion_jugadores} style={editingJugador !== 'new' && editingJugador?.numero && !selectedTorneo?.permite_edicion_jugadores ? { background: 'var(--bg)', cursor: 'not-allowed' } : undefined} />
               </div>
               <div className="form-group">
                 <label>Posición (opcional)</label>
@@ -648,7 +674,15 @@ export default function MyInfo() {
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span className={`badge badge-${j.estatus ? 'active' : 'inactive'}`}>{j.estatus ? 'Activo' : 'Baja'}</span>
-                      {j.fecha_baja && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Baja: {formatDate(j.fecha_baja)}</span>}
+                      {j.estatus && selectedTorneo?.es_capitan ? (
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button className="btn btn-sm btn-ghost" onClick={() => handleUploadPhoto(j.id)} title="Subir foto"><Camera size={14} /> Foto</button>
+                          <button className="btn btn-sm btn-ghost" onClick={() => openEditJugador(j)}>Editar</button>
+                          <button className="btn btn-sm btn-ghost text-danger" onClick={() => setDeleteJugadorId(j.id)}>Eliminar</button>
+                        </div>
+                      ) : !j.estatus ? (
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{j.fecha_baja ? formatDate(j.fecha_baja) : ''}</span>
+                      ) : null}
                     </div>
                   </div>
                 ))}

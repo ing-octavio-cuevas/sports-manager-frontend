@@ -18,6 +18,7 @@ interface TeamForm {
   inscripcion_pagada: boolean;
   monto_pagado: number | null;
   fecha_pago_inscripcion: string | null;
+  permite_edicion_jugadores: boolean;
 }
 
 interface PlayerForm {
@@ -39,6 +40,7 @@ const emptyForm: TeamForm = {
   inscripcion_pagada: false,
   monto_pagado: null,
   fecha_pago_inscripcion: null,
+  permite_edicion_jugadores: true,
 };
 
 const emptyPlayerForm: PlayerForm = {
@@ -63,6 +65,7 @@ export default function Teams() {
 
   const [selectedTournament, setSelectedTournament] = useState<string>('');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
+  const [searchTeam, setSearchTeam] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Team | null>(null);
   const [form, setForm] = useState<TeamForm>(emptyForm);
@@ -104,7 +107,7 @@ export default function Teams() {
   }, [fetchTeams]);
 
   const filteredTeams = selectedTournament
-    ? teams.filter(t => t.torneo_id === Number(selectedTournament))
+    ? teams.filter(t => t.torneo_id === Number(selectedTournament) && t.nombre.toLowerCase().includes(searchTeam.toLowerCase()))
     : [];
 
   // Team CRUD
@@ -127,6 +130,7 @@ export default function Teams() {
       inscripcion_pagada: t.inscripcion_pagada,
       monto_pagado: t.monto_pagado,
       fecha_pago_inscripcion: t.fecha_pago_inscripcion,
+      permite_edicion_jugadores: t.permite_edicion_jugadores ?? true,
     });
     setModalOpen(true);
   };
@@ -361,11 +365,20 @@ export default function Teams() {
 
       {/* Filter + View Toggle */}
       <div className="filter-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <select value={selectedTournament} onChange={e => setSelectedTournament(e.target.value)}>
+        <select value={selectedTournament} onChange={e => { setSelectedTournament(e.target.value); setSearchTeam(''); }}>
           <option value="">Todos los torneos</option>
           {[...tournaments].sort((a, b) => a.id - b.id).map(t => <option key={t.id} value={String(t.id)}>{t.nombre}{t.periodo ? ` · ${t.periodo}` : ''}{t.categoria ? ` · ${t.categoria}` : ''}</option>)}
         </select>
-        <div style={{ display: 'flex', gap: '0.25rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {selectedTournament && (
+            <input
+              type="text"
+              value={searchTeam}
+              onChange={e => setSearchTeam(e.target.value)}
+              placeholder="Buscar equipo..."
+              style={{ padding: '0.4rem 0.6rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', width: 150 }}
+            />
+          )}
           <button className={`btn btn-sm ${viewMode === 'cards' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setViewMode('cards')} title="Vista tarjetas">
             <LayoutGrid size={16} />
           </button>
@@ -542,6 +555,12 @@ export default function Teams() {
               Inscripción pagada en su totalidad
             </label>
           </div>
+          <div className="form-group">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={form.permite_edicion_jugadores} onChange={e => setForm({ ...form, permite_edicion_jugadores: e.target.checked })} />
+              Permitir al capitán editar nombres y números
+            </label>
+          </div>
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
@@ -673,10 +692,10 @@ export default function Teams() {
         <div className="form-stack">
           <div className="form-group">
             <label>Nombre completo *</label>
-            <input value={playerForm.nombre} onChange={e => setPlayerForm({ ...playerForm, nombre: e.target.value })} placeholder="Ej: Juan Pérez" />
+            <input value={playerForm.nombre} onChange={e => { const v = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, ''); setPlayerForm({ ...playerForm, nombre: v }); }} placeholder="Ej: Juan Pérez" />
           </div>
           <div className="form-group">
-            <label>Número (opcional)</label>
+            <label>Número en playera (opcional)</label>
             <input
               type="text"
               inputMode="numeric"

@@ -157,6 +157,7 @@ export const api = {
 
   // Partidos
   getPartidos: (torneoId: number, jornadaId: number) => get(`${BASE_URL}/partidos?torneo_id=${torneoId}&jornada_id=${jornadaId}`),
+  getPartidosEquipo: (equipoId: number, torneoId: number) => get(`${BASE_URL}/partidos/equipo/${equipoId}?torneo_id=${torneoId}`),
   createPartido: (data: any) => post(`${BASE_URL}/partidos/`, data),
   createPartidosBulk: (data: { jornada_id: number; partidos: any[] }) => post(`${BASE_URL}/partidos/bulk`, data),
   updatePartido: (id: number, data: any) => put(`${BASE_URL}/partidos/${id}`, data),
