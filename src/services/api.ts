@@ -160,6 +160,7 @@ export const api = {
   getPartidosEquipo: (equipoId: number, torneoId: number) => get(`${BASE_URL}/partidos/equipo/${equipoId}?torneo_id=${torneoId}`),
   createPartido: (data: any) => post(`${BASE_URL}/partidos/`, data),
   createPartidosBulk: (data: { jornada_id: number; partidos: any[] }) => post(`${BASE_URL}/partidos/bulk`, data),
+  resultadosBulk: (data: { jornada_id: number; resultados: { equipo_local: string; equipo_visitante: string; puntos_local: number; puntos_visitante: number }[] }) => put(`${BASE_URL}/partidos/resultados-bulk`, data),
   updatePartido: (id: number, data: any) => put(`${BASE_URL}/partidos/${id}`, data),
   async deletePartido(id: number) { await del(`${BASE_URL}/partidos/${id}`); },
 

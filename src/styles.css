@@ -351,6 +351,8 @@ body {
   z-index: 200;
   padding: 1rem;
   backdrop-filter: blur(4px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-content {
@@ -360,6 +362,8 @@ body {
   max-width: 480px;
   max-height: 90vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   box-shadow: var(--shadow-lg);
 }
 
@@ -1338,6 +1342,25 @@ img[style*="cursor: pointer"] {
   font-size: 0.6rem; font-weight: 800;
   background: none;
 }
+.td-player-captain {
+  position: absolute; bottom: -2px; left: -2px;
+  background: #f59e0b; color: white;
+  font-size: 0.5rem; font-weight: 800;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #0f1923;
+  line-height: 1;
+}
+.td-player-attendance {
+  position: absolute; bottom: -4px; right: -4px;
+  font-size: 0.55rem; font-weight: 800;
+  background: #0f1923;
+  padding: 1px 4px;
+  border-radius: 6px;
+  line-height: 1;
+  border: 1px solid rgba(255,255,255,0.15);
+}
 .td-player-name { font-size: 0.65rem; font-weight: 600; text-align: center; color: #e2e8f0; }
 .td-player-pos { font-size: 0.6rem; color: #64748b; }
 
@@ -1353,6 +1376,42 @@ img[style*="cursor: pointer"] {
 .modal-dark .modal-header { border-bottom-color: rgba(255,255,255,0.08); }
 .modal-dark .modal-header h3 { color: white; }
 .modal-dark .icon-btn { color: #94a3b8; }
+
+/* Player Card Modal */
+.modal-player-card .modal-content { max-width: 480px; background: #0f1923; border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 16px; overflow: hidden; }
+.modal-player-card .modal-header { border-bottom: none; padding: 0.75rem 1rem; position: absolute; right: 0; top: 0; z-index: 2; }
+.modal-player-card .modal-header h3 { display: none; }
+.modal-player-card .modal-body { padding: 0; }
+
+.player-card { display: flex; flex-direction: column; position: relative; }
+.player-card-body { display: flex; gap: 1.25rem; padding: 1.5rem 1.5rem 1rem; }
+.player-card-photo-col { flex-shrink: 0; width: 150px; }
+.player-card-photo { width: 150px; height: 200px; object-fit: cover; border-radius: 12px; border: 2px solid rgba(148, 163, 184, 0.25); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4); }
+.player-card-info-col { flex: 1; display: flex; flex-direction: column; gap: 0.6rem; padding-top: 0.5rem; }
+.player-card-name { font-size: 1.3rem; font-weight: 800; color: white; margin: 0; line-height: 1.2; }
+.player-card-badge { display: inline-flex; align-items: center; gap: 0.3rem; background: #3b82f6; color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 4px; width: fit-content; letter-spacing: 0.5px; }
+.player-card-badge-captain { background: #f59e0b; }
+.player-card-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.player-card-row-icon { font-size: 1rem; flex-shrink: 0; }
+.player-card-row-label { display: block; font-size: 0.6rem; color: #64748b; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
+.player-card-row-value { display: block; font-size: 0.9rem; color: #e2e8f0; font-weight: 600; }
+
+.player-card-footer { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1.5rem; border-top: 1px solid rgba(59, 130, 246, 0.15); background: rgba(59, 130, 246, 0.04); }
+.player-card-footer-logo { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.player-card-footer-league { display: block; font-size: 0.7rem; font-weight: 700; color: #3b82f6; text-transform: uppercase; letter-spacing: 0.3px; }
+.player-card-footer-team { display: block; font-size: 0.75rem; color: #94a3b8; font-weight: 500; }
+
+.player-card-expanded { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.92); display: flex; align-items: center; justify-content: center; z-index: 10; cursor: pointer; border-radius: 16px; padding: 1rem; }
+.player-card-expanded img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+
+@media (max-width: 500px) {
+  .player-card-body { flex-direction: column; align-items: center; text-align: center; gap: 1rem; }
+  .player-card-photo-col { width: 130px; }
+  .player-card-photo { width: 130px; height: 180px; }
+  .player-card-info-col { align-items: center; }
+  .player-card-row { justify-content: center; }
+  .player-card-row > div { text-align: left; }
+}
 
 /* Ganados vs Perdidos visual */
 .td-gvp { display: flex; align-items: flex-end; justify-content: center; gap: 2rem; padding: 1rem 0; }

@@ -1,8 +1,31 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-let modalCount = 0;
+// Shared scroll lock counter between Modal and ConfirmDialog
+export let scrollLockCount = 0;
+export function lockScroll() {
+  if (scrollLockCount === 0) {
+    const scrollY = window.scrollY;
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.top = `-${scrollY}px`;
+  }
+  scrollLockCount++;
+}
+export function unlockScroll() {
+  scrollLockCount--;
+  if (scrollLockCount <= 0) {
+    scrollLockCount = 0;
+    const scrollY = document.body.style.top;
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.width = '';
+    document.body.style.top = '';
+    window.scrollTo(0, parseInt(scrollY || '0') * -1);
+  }
+}
 
 interface ModalProps {
   open: boolean;
@@ -15,18 +38,22 @@ interface ModalProps {
 }
 
 export default function Modal({ open, onClose, title, children, wide, extraWide, className }: ModalProps) {
+  const locked = useRef(false);
+
   useEffect(() => {
-    if (open) {
-      modalCount++;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        modalCount--;
-        if (modalCount <= 0) {
-          modalCount = 0;
-          document.body.style.overflow = '';
-        }
-      };
+    if (open && !locked.current) {
+      locked.current = true;
+      lockScroll();
+    } else if (!open && locked.current) {
+      locked.current = false;
+      unlockScroll();
     }
+    return () => {
+      if (locked.current) {
+        locked.current = false;
+        unlockScroll();
+      }
+    };
   }, [open]);
 
   if (!open) return null;

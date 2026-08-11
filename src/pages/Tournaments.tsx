@@ -20,6 +20,8 @@ interface TournamentForm {
   anfitrion_id: number;
   fecha_inicio_asistencias: string;
   horas_limite_asistencia: number | '';
+  mostrar_asistencia_publica: boolean;
+  asistencia_minima_porcentaje: number | '';
 }
 
 interface UbicacionForm {
@@ -39,6 +41,8 @@ const emptyForm: TournamentForm = {
   anfitrion_id: 0,
   fecha_inicio_asistencias: '',
   horas_limite_asistencia: '',
+  mostrar_asistencia_publica: false,
+  asistencia_minima_porcentaje: '',
 };
 
 export default function Tournaments() {
@@ -103,6 +107,8 @@ export default function Tournaments() {
       anfitrion_id: t.anfitrion_id,
       fecha_inicio_asistencias: t.fecha_inicio_asistencias?.slice(0, 16) || '',
       horas_limite_asistencia: t.horas_limite_asistencia ?? '',
+      mostrar_asistencia_publica: t.mostrar_asistencia_publica ?? false,
+      asistencia_minima_porcentaje: t.asistencia_minima_porcentaje ?? '',
     });
     setModalOpen(true);
   };
@@ -389,6 +395,16 @@ export default function Tournaments() {
               </span>
             </label>
             <input type="number" min={0} step={1} value={form.horas_limite_asistencia} onChange={e => setForm({ ...form, horas_limite_asistencia: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="Ej: 2" />
+          </div>
+          <div className="form-group">
+            <label>Asistencia mínima requerida (%)</label>
+            <input type="number" min={0} max={100} step={1} value={form.asistencia_minima_porcentaje} onChange={e => setForm({ ...form, asistencia_minima_porcentaje: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="Ej: 75" />
+          </div>
+          <div className="form-group">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={form.mostrar_asistencia_publica} onChange={e => setForm({ ...form, mostrar_asistencia_publica: e.target.checked })} />
+              Mostrar asistencia en página pública
+            </label>
           </div>
           <div className="form-group">
             <label className="checkbox-label">

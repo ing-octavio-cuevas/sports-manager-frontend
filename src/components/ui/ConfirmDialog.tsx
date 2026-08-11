@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
-
-let confirmCount = 0;
+import { useEffect, useRef } from 'react';
+import { lockScroll, unlockScroll } from './Modal';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -12,18 +11,22 @@ interface ConfirmDialogProps {
 }
 
 export default function ConfirmDialog({ open, message, onConfirm, onCancel, confirmText = 'Eliminar', confirmStyle = 'danger' }: ConfirmDialogProps) {
+  const locked = useRef(false);
+
   useEffect(() => {
-    if (open) {
-      confirmCount++;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        confirmCount--;
-        if (confirmCount <= 0) {
-          confirmCount = 0;
-          // Don't restore overflow here — let Modal handle it
-        }
-      };
+    if (open && !locked.current) {
+      locked.current = true;
+      lockScroll();
+    } else if (!open && locked.current) {
+      locked.current = false;
+      unlockScroll();
     }
+    return () => {
+      if (locked.current) {
+        locked.current = false;
+        unlockScroll();
+      }
+    };
   }, [open]);
 
   if (!open) return null;

@@ -29,6 +29,8 @@ export interface Tournament {
   ubicaciones: Ubicacion[];
   fecha_inicio_asistencias?: string;
   horas_limite_asistencia?: number | null;
+  mostrar_asistencia_publica?: boolean;
+  asistencia_minima_porcentaje?: number | null;
 }
 
 export interface TournamentCreate {

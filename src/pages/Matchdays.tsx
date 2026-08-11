@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { Plus, Edit, Trash2, Eye, Calendar, LayoutGrid, List, Share2, UserCheck } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Calendar, LayoutGrid, List, Share2, UserCheck, Save } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Toast from '@/components/ui/Toast';
 import type { Matchday, Partido, PartidoSet, CombinacionPendiente, PartidoArbitraje } from '@/types';
-import { api } from '@/services/api';
+import { api, getFileUrl } from '@/services/api';
 import { formatDate } from '@/utils/dateUtils';
 import html2canvas from 'html2canvas';
+import { QRCodeCanvas } from 'qrcode.react';
 
 interface JornadaForm {
   numero: number;
@@ -56,6 +57,8 @@ export default function Matchdays() {
   // Partidos
   const [viewJornada, setViewJornada] = useState<Matchday | null>(null);
   const [partidos, setPartidos] = useState<Partido[]>([]);
+  const [inlineScores, setInlineScores] = useState<Record<number, { puntos_local: number; puntos_visitante: number }>>({});
+  const [savingInlineId, setSavingInlineId] = useState<number | null>(null);
   const [loadingPartidos, setLoadingPartidos] = useState(false);
   const [partidoModalOpen, setPartidoModalOpen] = useState(false);
   const [editingPartido, setEditingPartido] = useState<Partido | null>(null);
@@ -191,6 +194,27 @@ export default function Matchdays() {
       });
       setPartidosArbitrajes(arbMap);
     } catch { setPartidos([]); }
+  };
+
+  const saveInlineScore = async (partidoId: number) => {
+    const scores = inlineScores[partidoId];
+    if (!scores) return;
+    setSavingInlineId(partidoId);
+    try {
+      await api.updatePartido(partidoId, {
+        puntos_local: scores.puntos_local,
+        puntos_visitante: scores.puntos_visitante,
+        estatus: (scores.puntos_local > 0 || scores.puntos_visitante > 0) ? 'Jugado' : 'Por jugar',
+      });
+      setInlineScores(prev => { const next = { ...prev }; delete next[partidoId]; return next; });
+      await refreshPartidos();
+      await checkJornadaCompleta();
+      setToast({ message: 'Resultado guardado', type: 'success' });
+    } catch {
+      setToast({ message: 'Error al guardar resultado', type: 'error' });
+    } finally {
+      setSavingInlineId(null);
+    }
   };
 
   const checkJornadaCompleta = async () => {
@@ -444,6 +468,12 @@ export default function Matchdays() {
   const [importTipo, setImportTipo] = useState('Oficial');
   const [savingImport, setSavingImport] = useState(false);
 
+  // Importar Resultados con IA
+  const [importResultsOpen, setImportResultsOpen] = useState(false);
+  const [importResultsJson, setImportResultsJson] = useState('');
+  const [importResultsPreview, setImportResultsPreview] = useState<{ local: string; visitante: string; puntos_local: number; puntos_visitante: number; error?: string }[]>([]);
+  const [savingResults, setSavingResults] = useState(false);
+
   // Historial de equipo
   const [historialModalOpen, setHistorialModalOpen] = useState(false);
   const [historialEquipoId, setHistorialEquipoId] = useState<number>(0);
@@ -529,6 +559,67 @@ export default function Matchdays() {
     }
   };
 
+  // Resultados con IA
+  const parseResultsJson = () => {
+    try {
+      const raw = JSON.parse(importResultsJson);
+      if (!Array.isArray(raw)) { setToast({ message: 'El JSON debe ser un arreglo', type: 'error' }); return; }
+      const preview = raw.map((item: any) => {
+        const localName = (item.local || '').toUpperCase().trim();
+        const visitanteName = (item.visitante || '').toUpperCase().trim();
+        const localTeam = tournamentTeams.find(t => t.nombre.toUpperCase() === localName);
+        const visitanteTeam = tournamentTeams.find(t => t.nombre.toUpperCase() === visitanteName);
+        let error: string | undefined;
+        if (!localTeam) error = `Equipo "${item.local}" no encontrado`;
+        else if (!visitanteTeam) error = `Equipo "${item.visitante}" no encontrado`;
+        else if (item.puntos_local === undefined || item.puntos_visitante === undefined) error = 'Faltan puntos';
+        return {
+          local: item.local || '',
+          visitante: item.visitante || '',
+          puntos_local: Number(item.puntos_local) || 0,
+          puntos_visitante: Number(item.puntos_visitante) || 0,
+          error,
+        };
+      });
+      setImportResultsPreview(preview);
+    } catch {
+      setToast({ message: 'JSON inválido. Verifica el formato.', type: 'error' });
+    }
+  };
+
+  const handleResultsConfirm = async () => {
+    if (!viewJornada || importResultsPreview.length === 0) return;
+    const hasErrors = importResultsPreview.some(p => p.error);
+    if (hasErrors) { setToast({ message: 'Corrige los errores antes de confirmar', type: 'error' }); return; }
+    setSavingResults(true);
+    try {
+      const res = await api.resultadosBulk({
+        jornada_id: viewJornada.id,
+        resultados: importResultsPreview.map(p => ({
+          equipo_local: p.local,
+          equipo_visitante: p.visitante,
+          puntos_local: p.puntos_local,
+          puntos_visitante: p.puntos_visitante,
+        })),
+      });
+      const actualizados = (res as any)?.actualizados || importResultsPreview.length;
+      const errores = (res as any)?.errores || [];
+      if (errores.length > 0) {
+        setToast({ message: `${actualizados} resultados guardados, ${errores.length} con error`, type: 'error' });
+      } else {
+        setToast({ message: `${actualizados} resultados guardados correctamente`, type: 'success' });
+      }
+      setImportResultsOpen(false);
+      setImportResultsJson('');
+      setImportResultsPreview([]);
+      await refreshPartidos();
+    } catch (err: any) {
+      setToast({ message: err.message || 'Error al guardar resultados', type: 'error' });
+    } finally {
+      setSavingResults(false);
+    }
+  };
+
   const openAsistenciaManual = async (p: Partido) => {
     setAsistenciaPartido(p);
     setAsistenciaModalOpen(true);
@@ -601,7 +692,38 @@ export default function Matchdays() {
   const handleDownloadImage = async () => {
     if (!flyerRef.current) return;
     try {
-      const canvas = await html2canvas(flyerRef.current, { backgroundColor: '#ffffff', scale: 2 });
+      // Convertir imágenes externas a base64 para captura
+      const imgs = flyerRef.current.querySelectorAll('img');
+      const originalSrcs: { img: HTMLImageElement; src: string }[] = [];
+      await Promise.all(
+        Array.from(imgs).map(async (img) => {
+          const src = img.src;
+          if (src && src.startsWith('http') && !src.startsWith(window.location.origin) && !src.startsWith('data:')) {
+            try {
+              // Agregar timestamp para evitar cache sin CORS
+              const separator = src.includes('?') ? '&' : '?';
+              const resp = await fetch(src + separator + '_t=' + Date.now(), { mode: 'cors' });
+              if (!resp.ok) throw new Error('fetch failed');
+              const blob = await resp.blob();
+              const dataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+              originalSrcs.push({ img, src });
+              img.src = dataUrl;
+            } catch (e) {
+              console.warn('No se pudo convertir imagen:', src, e);
+            }
+          }
+        })
+      );
+      // Esperar re-render
+      await new Promise(r => setTimeout(r, 200));
+      const canvas = await html2canvas(flyerRef.current, { backgroundColor: '#ffffff', scale: 3 });
+      // Restaurar src originales
+      originalSrcs.forEach(({ img, src }) => { img.src = src; });
       const link = document.createElement('a');
       link.download = `jornada-${sharingJornada?.numero || ''}.png`;
       link.href = canvas.toDataURL('image/png');
@@ -658,7 +780,7 @@ export default function Matchdays() {
         <div className="empty-state"><Calendar size={48} /><p>No hay jornadas registradas</p></div>
       ) : viewMode === 'cards' ? (
         <div className="card-grid">
-          {[...jornadas].sort((a, b) => a.id - b.id).map(j => (
+          {[...jornadas].sort((a, b) => b.id - a.id).map(j => (
             <div key={j.id} className="card">
               <h3 className="card-title">Jornada {j.numero}</h3>
               <div className="card-details">
@@ -689,7 +811,7 @@ export default function Matchdays() {
               </tr>
             </thead>
             <tbody>
-              {[...jornadas].sort((a, b) => a.id - b.id).map(j => (
+              {[...jornadas].sort((a, b) => b.id - a.id).map(j => (
                 <tr key={j.id}>
                   <td><strong>Jornada {j.numero}</strong></td>
                   <td>{j.fecha ? formatDate(j.fecha) : '—'}</td>
@@ -741,7 +863,8 @@ export default function Matchdays() {
             {isHost && (
               <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
                 <button className="btn btn-primary btn-sm" onClick={openCreatePartido}><Plus size={16} /> Agregar Partido</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => { setImportModalOpen(true); setImportJson(''); setImportPreview([]); }}>⚡ Crear con IA</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setImportModalOpen(true); setImportJson(''); setImportPreview([]); }}>⚡ Crear rol con IA</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setImportResultsOpen(true); setImportResultsJson(''); setImportResultsPreview([]); }}>📊 Cargar resultados con IA</button>
                 {partidos.length > 0 && (
                   <button className="btn btn-secondary btn-sm" onClick={() => viewJornada && openShareJornada(viewJornada)}><Share2 size={16} /> Compartir</button>
                 )}
@@ -785,9 +908,21 @@ export default function Matchdays() {
                             )}
                             <tr style={{ background: p.estatus === 'Jugado' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)' }}>
                         <td><strong>{getTeamName(p.equipo_local_id)}</strong></td>
-                        <td className="text-center" style={{ fontWeight: 700, color: 'var(--accent)' }}>{p.puntos_local}</td>
+                        <td className="text-center">
+                          {isHost ? (
+                            <input type="text" inputMode="numeric" pattern="[0-9]*" value={inlineScores[p.id]?.puntos_local ?? p.puntos_local} onChange={e => { const val = e.target.value.replace(/[^0-9]/g, ''); setInlineScores(prev => ({ ...prev, [p.id]: { puntos_local: Number(val) || 0, puntos_visitante: prev[p.id]?.puntos_visitante ?? p.puntos_visitante } })); }} style={{ width: 40, textAlign: 'center', fontWeight: 700, color: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 4, padding: '0.2rem' }} />
+                          ) : (
+                            <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{p.puntos_local}</span>
+                          )}
+                        </td>
                         <td className="text-center" style={{ color: 'var(--text-secondary)' }}>|</td>
-                        <td className="text-center" style={{ fontWeight: 700, color: '#8b5cf6' }}>{p.puntos_visitante}</td>
+                        <td className="text-center">
+                          {isHost ? (
+                            <input type="text" inputMode="numeric" pattern="[0-9]*" value={inlineScores[p.id]?.puntos_visitante ?? p.puntos_visitante} onChange={e => { const val = e.target.value.replace(/[^0-9]/g, ''); setInlineScores(prev => ({ ...prev, [p.id]: { puntos_local: prev[p.id]?.puntos_local ?? p.puntos_local, puntos_visitante: Number(val) || 0 } })); }} style={{ width: 40, textAlign: 'center', fontWeight: 700, color: '#8b5cf6', border: '1px solid var(--border)', borderRadius: 4, padding: '0.2rem' }} />
+                          ) : (
+                            <span style={{ fontWeight: 700, color: '#8b5cf6' }}>{p.puntos_visitante}</span>
+                          )}
+                        </td>
                         <td><strong>{getTeamName(p.equipo_visitante_id)}</strong></td>
                         <td>{p.fecha_hora ? `${formatDate(p.fecha_hora)} ${new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '—'}</td>
                         <td>{p.tipo || '—'}</td>
@@ -804,6 +939,15 @@ export default function Matchdays() {
                         <td>{p.observaciones ? (p.observaciones.length > 10 ? p.observaciones.slice(0, 10) + '...' : p.observaciones) : '—'}</td>
                         <td>
                           <div style={{ display: 'flex', gap: '0.25rem' }}>
+                            {(() => {
+                              const s = inlineScores[p.id];
+                              const changed = s && (s.puntos_local !== p.puntos_local || s.puntos_visitante !== p.puntos_visitante);
+                              return changed ? (
+                              <button className="btn btn-sm btn-primary" onClick={() => saveInlineScore(p.id)} disabled={savingInlineId === p.id} title="Guardar resultado" style={{ padding: '0.2rem 0.4rem' }}>
+                                {savingInlineId === p.id ? '...' : <Save size={14} />}
+                              </button>
+                              ) : null;
+                            })()}
                             <button className="btn btn-sm btn-ghost" onClick={async () => { setViewPartido(p); try { const d = await api.getSets(p.id); setViewPartidoSets(Array.isArray(d) ? d : []); } catch { setViewPartidoSets([]); } }} title="Ver"><Eye size={14} /></button>
                             {isHost && (
                               <>
@@ -1218,51 +1362,126 @@ export default function Matchdays() {
 
       {/* Share Jornada Modal */}
       <Modal open={shareModalOpen} onClose={() => setShareModalOpen(false)} title="Compartir Jornada" wide>
-        <div ref={flyerRef} style={{ padding: '1.5rem', background: 'white', fontFamily: 'Inter, system-ui, sans-serif' }}>
-          <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#1e293b', marginBottom: '0.25rem' }}>
-              {tournaments.find(t => t.id === torneoId)?.nombre || 'Torneo'}
-            </h2>
-            <p style={{ fontSize: '1rem', fontWeight: 600, color: '#3b82f6' }}>Jornada {sharingJornada?.numero}</p>
-            {sharingJornada?.fecha && <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.25rem' }}>{formatDate(sharingJornada.fecha)}</p>}
+        <div ref={flyerRef} style={{ width: 600, background: '#ffffff', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden' }}>
+          {/* Header */}
+          <div style={{ background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', padding: '1rem 1.25rem', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, background: 'radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%)', borderRadius: '50%' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {(() => { const torneo = tournaments.find(t => t.id === torneoId); return torneo?.logo ? <img src={getFileUrl(torneo.logo) || '/logo-tornealo.png'} alt="" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.2)' }} /> : <img src="/logo-tornealo.png" alt="Tornealo" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.2)' }} />; })()}
+              <div>
+                <h1 style={{ fontSize: '1.2rem', fontWeight: 900, color: 'white', margin: 0, lineHeight: 1.1, textTransform: 'uppercase' }}>Rol de Partidos</h1>
+                <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0', margin: 0, marginTop: '0.2rem' }}>{tournaments.find(t => t.id === torneoId)?.nombre || 'Torneo de Voleibol'}</p>
+                <p style={{ fontSize: '0.6rem', color: '#94a3b8', margin: 0, marginTop: '0.1rem' }}>
+                  {tournaments.find(t => t.id === torneoId)?.categoria || ''}{tournaments.find(t => t.id === torneoId)?.periodo ? ` · ${tournaments.find(t => t.id === torneoId)?.periodo}` : ''}
+                </p>
+              </div>
+            </div>
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-            <thead>
-              <tr style={{ background: '#f1f5f9' }}>
-                <th style={{ padding: '0.5rem', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase' }}>Local</th>
-                <th style={{ padding: '0.5rem', textAlign: 'center', fontWeight: 700, color: '#64748b', fontSize: '0.75rem' }}>vs</th>
-                <th style={{ padding: '0.5rem', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase' }}>Visitante</th>
-                <th style={{ padding: '0.5rem', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase' }}>Hora</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                let lastUbicacionId: number | null | undefined = undefined;
-                return sharePartidos.map(p => {
-                  const showHeader = p.ubicacion_id !== lastUbicacionId;
-                  lastUbicacionId = p.ubicacion_id;
-                  return (
-                    <React.Fragment key={p.id}>
-                      {showHeader && (
-                        <tr>
-                          <td colSpan={4} style={{ padding: '0.6rem 0.5rem 0.3rem', fontWeight: 700, fontSize: '0.8rem', color: '#1e293b', borderTop: '2px solid #e2e8f0' }}>
-                            📍 {p.ubicacion_id ? getUbicacionName(p.ubicacion_id) : 'Sin ubicación'}
-                          </td>
-                        </tr>
+
+          {/* Info Cards */}
+          {(() => {
+            const direcciones = new Set(sharePartidos.map(p => {
+              const u = p.ubicacion_id ? ubicaciones.find(ub => ub.id === p.ubicacion_id) : null;
+              return u?.direccion || '';
+            }).filter(Boolean));
+            const mismaDireccion = direcciones.size <= 1;
+            const direccionComun = mismaDireccion ? [...direcciones][0] || '—' : null;
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: mismaDireccion ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', gap: '0.5rem', padding: '0.75rem 1.25rem', background: '#f8fafc' }}>
+                {mismaDireccion && (
+                  <div style={{ background: 'white', borderRadius: 6, padding: '0.5rem', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                    <p style={{ fontSize: '0.55rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>📌 Lugar</p>
+                    <p style={{ fontSize: '0.65rem', fontWeight: 600, color: '#1e293b' }}>{direccionComun}</p>
+                  </div>
+                )}
+                <div style={{ background: 'white', borderRadius: 6, padding: '0.5rem', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                  <p style={{ fontSize: '0.55rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>📅 Fecha</p>
+                  <p style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1e293b' }}>{sharingJornada?.fecha ? formatDate(sharingJornada.fecha) : '—'}</p>
+                </div>
+                <div style={{ background: 'white', borderRadius: 6, padding: '0.5rem', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                  <p style={{ fontSize: '0.55rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>🏐 Jornada</p>
+                  <p style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b' }}>JORNADA {sharingJornada?.numero}</p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Partidos agrupados por ubicación */}
+          <div style={{ padding: '0.5rem 1.25rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {(() => {
+              const direcciones = new Set(sharePartidos.map(p => {
+                const u = p.ubicacion_id ? ubicaciones.find(ub => ub.id === p.ubicacion_id) : null;
+                return u?.direccion || '';
+              }).filter(Boolean));
+              const mismaDireccion = direcciones.size <= 1;
+              const grouped = new Map<number | null, Partido[]>();
+              sharePartidos.forEach(p => {
+                const key = p.ubicacion_id;
+                if (!grouped.has(key)) grouped.set(key, []);
+                grouped.get(key)!.push(p);
+              });
+              return [...grouped.entries()].map(([ubicId, partidos]) => {
+                const ubic = ubicId ? ubicaciones.find(u => u.id === ubicId) : null;
+                return (
+                  <div key={ubicId ?? 'sin'} style={{ background: '#1e293b', borderRadius: '8px', overflow: 'hidden' }}>
+                    <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '0.7rem' }}>📍</span>
+                        <h3 style={{ margin: 0, fontSize: '0.75rem', fontWeight: 800, color: 'white', textTransform: 'uppercase' }}>{ubic?.nombre || 'Sin ubicación'}</h3>
+                      </div>
+                      {!mismaDireccion && ubic?.direccion && (
+                        <p style={{ margin: 0, marginTop: '0.1rem', marginLeft: '1.3rem', fontSize: '0.55rem', color: '#94a3b8' }}>{ubic.direccion}</p>
                       )}
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '0.4rem 0.5rem', fontWeight: 600 }}>{getTeamName(p.equipo_local_id)}</td>
-                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', color: '#64748b' }}>vs</td>
-                        <td style={{ padding: '0.4rem 0.5rem', fontWeight: 600 }}>{getTeamName(p.equipo_visitante_id)}</td>
-                        <td style={{ padding: '0.4rem 0.5rem', color: '#64748b' }}>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                      </tr>
-                    </React.Fragment>
-                  );
-                });
-              })()}
-            </tbody>
-          </table>
-          <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.7rem', color: '#94a3b8' }}>Tornealo Sports</p>
+                    </div>
+                    {/* Table Header */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '22px 55px 1fr 28px 1fr 55px', gap: '0.3rem', padding: '0.35rem 0.75rem', background: 'rgba(255,255,255,0.05)', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.5rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>#</span>
+                      <span style={{ fontSize: '0.5rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Hora</span>
+                      <span style={{ fontSize: '0.5rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', textAlign: 'center' }}>Local</span>
+                      <span style={{ fontSize: '0.5rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', textAlign: 'center' }}>vs</span>
+                      <span style={{ fontSize: '0.5rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', textAlign: 'center' }}>Visitante</span>
+                      <span style={{ fontSize: '0.5rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', textAlign: 'center' }}>Tipo</span>
+                    </div>
+                    {/* Rows */}
+                    {partidos.map((p, i) => (
+                      <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '22px 55px 1fr 28px 1fr 55px', gap: '0.3rem', padding: '0.4rem 0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)', alignItems: 'center', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#3b82f6' }}>{i + 1}</span>
+                        <span style={{ fontSize: '0.6rem', color: '#e2e8f0' }}>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
+                          <img src={getFileUrl(localTeams.find(t => t.id === p.equipo_local_id)?.logo || '') || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getTeamName(p.equipo_local_id)) + '&background=3b82f6&color=fff&size=20'} alt="" style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} />
+                          <span style={{ fontSize: '0.6rem', fontWeight: 700, color: 'white' }}>{getTeamName(p.equipo_local_id)}</span>
+                        </div>
+                        <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#f59e0b', textAlign: 'center' }}>VS</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
+                          <img src={getFileUrl(localTeams.find(t => t.id === p.equipo_visitante_id)?.logo || '') || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getTeamName(p.equipo_visitante_id)) + '&background=8b5cf6&color=fff&size=20'} alt="" style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} />
+                          <span style={{ fontSize: '0.6rem', fontWeight: 700, color: 'white' }}>{getTeamName(p.equipo_visitante_id)}</span>
+                        </div>
+                        <span style={{ fontSize: '0.5rem', fontWeight: 600, color: '#94a3b8', textAlign: 'center', textTransform: 'uppercase' }}>{p.tipo || '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          {/* Footer */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 1.25rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <QRCodeCanvas value={`${window.location.origin}/torneo/${torneoId}`} size={36} level="M" />
+              <div>
+                <p style={{ fontSize: '0.55rem', color: '#64748b', margin: 0 }}>Detalles del torneo en</p>
+                <p style={{ fontSize: '0.6rem', fontWeight: 700, color: '#3b82f6', margin: 0, marginTop: '0.1rem' }}>{window.location.origin}/torneo/{torneoId}</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <img src="/logo-tornealo.png" alt="" style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />
+              <div>
+                <p style={{ fontSize: '0.65rem', fontWeight: 800, color: '#1e293b', margin: 0 }}>TORNEALO</p>
+                <p style={{ fontSize: '0.5rem', fontWeight: 700, color: '#3b82f6', margin: 0 }}>SPORTS</p>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => setShareModalOpen(false)}>Cerrar</button>
@@ -1395,7 +1614,7 @@ ${ubicaciones.map(u => u.nombre).join(', ')}`}
                       <th>#</th>
                       <th>Local</th>
                       <th>Visitante</th>
-                      <th>Hora</th>
+                      <th>Fecha/Hora</th>
                       <th>Cancha</th>
                       <th>Estado</th>
                     </tr>
@@ -1421,7 +1640,7 @@ ${ubicaciones.map(u => u.nombre).join(', ')}`}
                               <td>{p.origIdx + 1}</td>
                               <td><strong>{p.local}</strong></td>
                               <td><strong>{p.visitante}</strong></td>
-                              <td>{p.fecha_hora ? new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                              <td>{p.fecha_hora ? `${formatDate(p.fecha_hora)} ${new Date(p.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '—'}</td>
                               <td>
                                 <select
                                   value={p.ubicacion_id}
@@ -1453,6 +1672,107 @@ ${ubicaciones.map(u => u.nombre).join(', ')}`}
                 <button className="btn btn-secondary" onClick={() => setImportModalOpen(false)}>Cancelar</button>
                 <button className="btn btn-primary" onClick={handleImportConfirm} disabled={savingImport || importPreview.some(p => !!p.error)}>
                   {savingImport ? 'Creando...' : `Confirmar (${importPreview.filter(p => !p.error).length} partidos)`}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      {/* Importar Resultados con IA Modal */}
+      <Modal open={importResultsOpen} onClose={() => setImportResultsOpen(false)} title="Cargar Resultados con IA" extraWide>
+        <div>
+          {importResultsPreview.length === 0 ? (
+            <>
+              <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'linear-gradient(135deg, #10b981 0%, #3b82f6 100%)', borderRadius: 'var(--radius)', color: 'white' }}>
+                <p style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.5rem' }}>📊 Prompt para IA (Resultados)</p>
+                <p style={{ fontSize: '0.7rem', marginBottom: '0.5rem', opacity: 0.9 }}>Copia este texto y pégalo en ChatGPT junto con la imagen de los resultados:</p>
+                <div style={{ position: 'relative' }}>
+                  <pre style={{ background: 'rgba(0,0,0,0.3)', padding: '0.6rem', borderRadius: '8px', fontSize: '0.65rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 150, overflowY: 'auto', margin: 0 }}>
+{`Con base en la siguiente imagen, regrésame un JSON con los resultados de los partidos de esta jornada.
+
+Estos son los partidos programados (local vs visitante):
+${partidos.map(p => `- ${getTeamName(p.equipo_local_id)} vs ${getTeamName(p.equipo_visitante_id)}`).join('\n')}
+
+Regrésame el JSON con esta estructura exacta:
+[
+  { "local": "EQUIPO_LOCAL", "visitante": "EQUIPO_VISITANTE", "puntos_local": 3, "puntos_visitante": 0 }
+]
+
+Donde puntos_local y puntos_visitante son los puntos que obtiene cada equipo en ese partido.
+Respeta exactamente los nombres de local y visitante como te los di arriba.`}
+                  </pre>
+                  <button
+                    style={{ position: 'absolute', top: '0.4rem', right: '0.4rem', padding: '0.25rem 0.5rem', borderRadius: '12px', border: 'none', background: 'rgba(255,255,255,0.9)', color: '#10b981', fontWeight: 700, fontSize: '0.65rem', cursor: 'pointer' }}
+                    onClick={() => {
+                      const prompt = `Con base en la siguiente imagen, regrésame un JSON con los resultados de los partidos de esta jornada.\n\nEstos son los partidos programados (local vs visitante):\n${partidos.map(p => `- ${getTeamName(p.equipo_local_id)} vs ${getTeamName(p.equipo_visitante_id)}`).join('\n')}\n\nRegrésame el JSON con esta estructura exacta:\n[\n  { "local": "EQUIPO_LOCAL", "visitante": "EQUIPO_VISITANTE", "puntos_local": 3, "puntos_visitante": 0 }\n]\n\nDonde puntos_local y puntos_visitante son los puntos que obtiene cada equipo en ese partido.\nRespeta exactamente los nombres de local y visitante como te los di arriba.`;
+                      navigator.clipboard.writeText(prompt);
+                      setToast({ message: 'Prompt copiado', type: 'success' });
+                    }}
+                  >Copiar</button>
+                </div>
+              </div>
+
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                Pega aquí el JSON que te devolvió la IA:
+              </p>
+              <textarea
+                value={importResultsJson}
+                onChange={e => setImportResultsJson(e.target.value)}
+                placeholder="Pega tu JSON aquí..."
+                style={{ width: '100%', minHeight: 150, padding: '0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
+              />
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setImportResultsOpen(false)}>Cancelar</button>
+                <button className="btn btn-primary" onClick={parseResultsJson} disabled={!importResultsJson.trim()}>Procesar</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                {importResultsPreview.filter(p => !p.error).length} de {importResultsPreview.length} resultados listos para guardar.
+              </p>
+
+              <div className="table-wrapper" style={{ maxHeight: 350, overflowY: 'auto' }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Local</th>
+                      <th>Pts</th>
+                      <th></th>
+                      <th>Pts</th>
+                      <th>Visitante</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importResultsPreview.map((p, i) => (
+                      <tr key={i} style={{ background: p.error ? 'rgba(239,68,68,0.08)' : undefined }}>
+                        <td>{i + 1}</td>
+                        <td><strong>{p.local}</strong></td>
+                        <td style={{ fontWeight: 700, color: p.puntos_local > p.puntos_visitante ? 'var(--success)' : 'var(--text-secondary)' }}>{p.puntos_local}</td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>vs</td>
+                        <td style={{ fontWeight: 700, color: p.puntos_visitante > p.puntos_local ? 'var(--success)' : 'var(--text-secondary)' }}>{p.puntos_visitante}</td>
+                        <td><strong>{p.visitante}</strong></td>
+                        <td>
+                          {p.error ? (
+                            <span style={{ color: 'var(--danger)', fontSize: '0.75rem' }}>⚠ {p.error}</span>
+                          ) : (
+                            <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>✓ OK</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="modal-footer">
+                <button className="btn btn-ghost" onClick={() => { setImportResultsPreview([]); }}>← Volver a editar</button>
+                <button className="btn btn-secondary" onClick={() => setImportResultsOpen(false)}>Cancelar</button>
+                <button className="btn btn-primary" onClick={handleResultsConfirm} disabled={savingResults || importResultsPreview.some(p => !!p.error)}>
+                  {savingResults ? 'Guardando...' : `Confirmar (${importResultsPreview.filter(p => !p.error).length} resultados)`}
                 </button>
               </div>
             </>
