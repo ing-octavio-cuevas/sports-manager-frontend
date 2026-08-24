@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tornealo Sports - Nuevas Funcionalidades</title>
+  <title>Tornealo Sports - Actualización v2.0</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -15,44 +15,36 @@
     }
     .infografia {
       width: 480px;
-      background: #ffffff;
+      background: #0a1628;
       border-radius: 20px;
       overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      color: #e2e8f0;
     }
     .header {
-      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      background: linear-gradient(135deg, #111d33 0%, #1e3a5f 100%);
       padding: 2rem 2rem 1.5rem;
       text-align: center;
       position: relative;
       overflow: hidden;
     }
     .header::before {
-      content: '';
+      content: '🏐';
       position: absolute;
-      top: -30px;
-      right: -30px;
-      width: 150px;
-      height: 150px;
-      background: radial-gradient(circle, rgba(59,130,246,0.2) 0%, transparent 70%);
-      border-radius: 50%;
+      top: 10px;
+      right: 15px;
+      font-size: 3rem;
+      opacity: 0.1;
     }
     .header::after {
       content: '';
       position: absolute;
-      bottom: -40px;
+      bottom: -30px;
       left: -20px;
       width: 120px;
       height: 120px;
-      background: radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%);
+      background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
       border-radius: 50%;
-    }
-    .header img {
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      margin-bottom: 0.75rem;
-      border: 2px solid rgba(255,255,255,0.2);
     }
     .header h1 {
       color: white;
@@ -79,7 +71,7 @@
       padding: 1.5rem 2rem;
     }
     .section-title {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-weight: 700;
       color: #3b82f6;
       text-transform: uppercase;
@@ -102,31 +94,32 @@
       font-size: 1.1rem;
       flex-shrink: 0;
     }
-    .feature-icon.blue { background: rgba(59,130,246,0.1); }
-    .feature-icon.green { background: rgba(16,185,129,0.1); }
-    .feature-icon.purple { background: rgba(139,92,246,0.1); }
-    .feature-icon.orange { background: rgba(245,158,11,0.1); }
-    .feature-icon.red { background: rgba(239,68,68,0.1); }
+    .feature-icon.blue { background: rgba(59,130,246,0.15); }
+    .feature-icon.green { background: rgba(16,185,129,0.15); }
+    .feature-icon.purple { background: rgba(139,92,246,0.15); }
+    .feature-icon.orange { background: rgba(245,158,11,0.15); }
+    .feature-icon.red { background: rgba(239,68,68,0.15); }
+    .feature-icon.cyan { background: rgba(6,182,212,0.15); }
     .feature-text h3 {
       font-size: 0.85rem;
       font-weight: 700;
-      color: #1e293b;
+      color: #e2e8f0;
       margin-bottom: 0.15rem;
     }
     .feature-text p {
       font-size: 0.7rem;
-      color: #64748b;
+      color: #94a3b8;
       line-height: 1.4;
     }
     .divider {
       height: 1px;
-      background: #e2e8f0;
+      background: rgba(255,255,255,0.06);
       margin: 1.25rem 0;
     }
     .footer {
-      background: #f8fafc;
+      background: #111d33;
       padding: 1.25rem 2rem;
-      border-top: 1px solid #e2e8f0;
+      border-top: 1px solid rgba(255,255,255,0.06);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -140,20 +133,10 @@
       display: block;
       font-size: 0.7rem;
     }
-    .footer-right {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-    }
-    .footer-right img {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-    }
     .footer-brand {
       font-size: 0.7rem;
       font-weight: 800;
-      color: #1e293b;
+      color: #e2e8f0;
     }
     .footer-brand span {
       display: block;
@@ -161,33 +144,14 @@
       font-weight: 700;
       color: #3b82f6;
     }
-    .cta {
-      text-align: center;
-      padding: 1rem 2rem 1.5rem;
-    }
-    .cta p {
-      font-size: 0.75rem;
-      color: #64748b;
-      margin-bottom: 0.5rem;
-    }
-    .cta a {
-      display: inline-block;
-      background: #3b82f6;
-      color: white;
-      padding: 0.5rem 1.5rem;
-      border-radius: 25px;
-      text-decoration: none;
-      font-size: 0.8rem;
-      font-weight: 700;
-    }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script>
     function descargar() {
       const el = document.querySelector('.infografia');
-      html2canvas(el, { scale: 3, backgroundColor: '#ffffff' }).then(canvas => {
+      html2canvas(el, { scale: 3, backgroundColor: null }).then(canvas => {
         const link = document.createElement('a');
-        link.download = 'tornealo-novedades.png';
+        link.download = 'tornealo-actualizacion-v2.png';
         link.href = canvas.toDataURL('image/png');
         link.click();
       });
@@ -200,89 +164,97 @@
   </div>
   <div class="infografia">
     <div class="header">
-      <img src="logo-tornealo.png" alt="Tornealo Sports" onerror="this.style.display='none'">
-      <h1>Nuevas Funcionalidades</h1>
-      <p class="subtitle">Tornealo Sports se actualiza</p>
-      <span class="version-badge">v1.6.6</span>
+      <h1>Nueva Actualización</h1>
+      <p class="subtitle">Tornealo Sports se renueva</p>
+      <span class="version-badge">v2.0</span>
     </div>
 
     <div class="content">
-      <p class="section-title">🚀 Novedades para jugadores</p>
+      <p class="section-title">🏐 Vista pública del torneo</p>
 
       <div class="feature">
         <div class="feature-icon blue">📊</div>
         <div class="feature-text">
-          <h3>Resultados de todos tus partidos</h3>
-          <p>Ahora puedes ver el historial completo de resultados de tu equipo con scores y rivales.</p>
+          <h3>Dashboard de equipo rediseñado</h3>
+          <p>Al seleccionar un equipo, ahora ves un panel completo con KPIs, gráficas y estadísticas estilo app deportiva.</p>
         </div>
       </div>
 
       <div class="feature">
-        <div class="feature-icon green">📋</div>
+        <div class="feature-icon green">�</div>
         <div class="feature-text">
-          <h3>Porcentaje de asistencia</h3>
-          <p>Consulta tu porcentaje de asistencia y verifica si cumples con el mínimo requerido.</p>
+          <h3>Nuevas gráficas de rendimiento</h3>
+          <p>Efectividad por partido (heatmap), rachas de victorias/derrotas y posición en el torneo con indicador visual.</p>
         </div>
       </div>
 
       <div class="feature">
-        <div class="feature-icon purple">🪪</div>
+        <div class="feature-icon purple">🏆</div>
         <div class="feature-text">
-          <h3>Credencial de jugador</h3>
-          <p>Toca la foto de cualquier jugador para ver su credencial con número, posición y equipo.</p>
+          <h3>Historial completo de resultados</h3>
+          <p>Todos los partidos jugados con scores, rivales y fechas. Vista cards o lista completa.</p>
         </div>
       </div>
 
       <div class="feature">
-        <div class="feature-icon orange">👑</div>
+        <div class="feature-icon orange">🌙</div>
         <div class="feature-text">
-          <h3>Indicador de capitán</h3>
-          <p>Los capitanes se identifican con un indicador visual en la plantilla y asistencias.</p>
+          <h3>Modo oscuro / claro</h3>
+          <p>Nuevo toggle para cambiar entre tema oscuro y claro en la página pública del torneo.</p>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon cyan">�</div>
+        <div class="feature-text">
+          <h3>Asistencia y capitán visibles</h3>
+          <p>Porcentaje de asistencia en la foto de cada jugador. Indicador de capitán en plantilla y asistencias.</p>
         </div>
       </div>
 
       <div class="divider"></div>
 
-      <p class="section-title">🏐 Novedades para anfitriones</p>
+      <p class="section-title">⚡ Para anfitriones</p>
 
       <div class="feature">
-        <div class="feature-icon blue">⚡</div>
+        <div class="feature-icon green">🤖</div>
         <div class="feature-text">
           <h3>Carga de resultados con IA</h3>
-          <p>Sube una foto de los resultados y la IA los captura automáticamente.</p>
+          <p>Sube una foto de resultados → la IA los extrae → edita si es necesario → confirma. Todo en un clic.</p>
         </div>
       </div>
 
       <div class="feature">
-        <div class="feature-icon green">✏️</div>
+        <div class="feature-icon blue">✏️</div>
         <div class="feature-text">
           <h3>Edición rápida de scores</h3>
-          <p>Edita los puntos directamente desde la lista de partidos sin abrir formularios.</p>
+          <p>Edita los puntos directamente en la lista de partidos. Se guarda con un clic sin abrir formularios.</p>
         </div>
       </div>
 
       <div class="feature">
-        <div class="feature-icon red">🖼️</div>
+        <div class="feature-icon purple">🖼️</div>
         <div class="feature-text">
-          <h3>Compartir rol de partidos</h3>
-          <p>Genera y descarga la imagen del rol con logos, horarios y QR del torneo.</p>
+          <h3>Flyer del rol mejorado</h3>
+          <p>Diseño compacto con logos, agrupado por cancha, QR del torneo y datos del torneo en el header.</p>
         </div>
       </div>
-    </div>
 
-    <div class="cta">
-      <p>Consulta todo desde la página pública del torneo</p>
-      <a href="#">tornealo-sports.com/torneo/3</a>
+      <div class="feature">
+        <div class="feature-icon red">📋</div>
+        <div class="feature-text">
+          <h3>Compartir tabla de posiciones</h3>
+          <p>Genera y comparte la tabla de posiciones como imagen directamente desde la vista pública.</p>
+        </div>
+      </div>
     </div>
 
     <div class="footer">
       <div class="footer-left">
-        Actualización julio 2026
-        <strong>¡Disfruta las nuevas funciones!</strong>
+        Actualización agosto 2026
+        <strong>¡Descubre las nuevas funciones!</strong>
       </div>
-      <div class="footer-right">
-        <div class="footer-brand">TORNEALO<span>SPORTS</span></div>
-      </div>
+      <div class="footer-brand">TORNEALO<span>SPORTS</span></div>
     </div>
   </div>
 </body>

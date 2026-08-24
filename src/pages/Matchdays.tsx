@@ -613,6 +613,7 @@ export default function Matchdays() {
       setImportResultsJson('');
       setImportResultsPreview([]);
       await refreshPartidos();
+      await checkJornadaCompleta();
     } catch (err: any) {
       setToast({ message: err.message || 'Error al guardar resultados', type: 'error' });
     } finally {
@@ -1751,9 +1752,13 @@ Respeta exactamente los nombres de local y visitante como te los di arriba.`}
                       <tr key={i} style={{ background: p.error ? 'rgba(239,68,68,0.08)' : undefined }}>
                         <td>{i + 1}</td>
                         <td><strong>{p.local}</strong></td>
-                        <td style={{ fontWeight: 700, color: p.puntos_local > p.puntos_visitante ? 'var(--success)' : 'var(--text-secondary)' }}>{p.puntos_local}</td>
+                        <td>
+                          <input type="text" inputMode="numeric" pattern="[0-9]*" value={p.puntos_local} onChange={e => { const val = e.target.value.replace(/[^0-9]/g, ''); setImportResultsPreview(prev => prev.map((item, idx) => idx === i ? { ...item, puntos_local: Number(val) || 0 } : item)); }} style={{ width: 36, textAlign: 'center', fontWeight: 700, color: p.puntos_local > p.puntos_visitante ? 'var(--success)' : 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 4, padding: '0.2rem' }} />
+                        </td>
                         <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>vs</td>
-                        <td style={{ fontWeight: 700, color: p.puntos_visitante > p.puntos_local ? 'var(--success)' : 'var(--text-secondary)' }}>{p.puntos_visitante}</td>
+                        <td>
+                          <input type="text" inputMode="numeric" pattern="[0-9]*" value={p.puntos_visitante} onChange={e => { const val = e.target.value.replace(/[^0-9]/g, ''); setImportResultsPreview(prev => prev.map((item, idx) => idx === i ? { ...item, puntos_visitante: Number(val) || 0 } : item)); }} style={{ width: 36, textAlign: 'center', fontWeight: 700, color: p.puntos_visitante > p.puntos_local ? 'var(--success)' : 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 4, padding: '0.2rem' }} />
+                        </td>
                         <td><strong>{p.visitante}</strong></td>
                         <td>
                           {p.error ? (

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Trophy, Users, ClipboardList, Calendar, Share2 } from 'lucide-react';
+import { Trophy, Users, ClipboardList, Calendar, Share2, Moon, Sun } from 'lucide-react';
 import { getFileUrl } from '@/services/api';
 import { formatDate } from '@/utils/dateUtils';
 import Modal from '@/components/ui/Modal';
@@ -98,9 +98,12 @@ export default function TorneoPublico() {
   const [selectedEquipo, setSelectedEquipo] = useState<number | null>(null);
   const [teamResults, setTeamResults] = useState<{ partido_id: number; jornada_numero: number; fecha: string; tipo: string; equipo_local: string; equipo_local_logo: string | null; equipo_visitante: string; equipo_visitante_logo: string | null; puntos_local: number; puntos_visitante: number; resultado: string }[]>([]);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [resultsViewMode, setResultsViewMode] = useState<'cards' | 'list'>('cards');
+  const [infoTooltip, setInfoTooltip] = useState<string | null>(null);
   const [viewPhoto, setViewPhoto] = useState<{ url: string; nombre: string; numero?: number; posicion?: string; equipo?: string; categoria?: string; equipoLogo?: string; tipo?: 'jugador' | 'equipo'; esCapitan?: boolean; asistenciaPartidos?: number; asistenciaTotalPartidos?: number; asistenciaPorcentaje?: number; asistenciaCumple?: boolean } | null>(null);
   const [expandedPhoto, setExpandedPhoto] = useState(false);
   const [sharingLoading, setSharingLoading] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => Math.random() > 0.5);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -155,7 +158,11 @@ export default function TorneoPublico() {
   const selectedTeam = equipos.find(e => e.id === selectedEquipo);
 
   return (
-    <div className="public-page" style={{ padding: 0, background: 'white' }}>
+    <div className={`public-page ${darkMode ? 'public-dark' : 'public-light'}`} style={{ padding: 0 }}>
+      {/* Dark/Light Toggle */}
+      <button onClick={() => setDarkMode(!darkMode)} className="public-theme-toggle" aria-label="Cambiar tema">
+        {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+      </button>
       {/* Hero Header */}
       <div className="public-hero">
         <div className="public-hero-content">
@@ -175,7 +182,7 @@ export default function TorneoPublico() {
           <ClipboardList size={16} /> Posiciones
         </button>
         <button className={`public-tab ${activeTab === 'equipos' ? 'active' : ''}`} onClick={() => setActiveTab('equipos')}>
-          <Users size={16} /> Equipos
+          <Users size={16} /> Estadísticas
         </button>
         <button className={`public-tab ${activeTab === 'asistencias' ? 'active' : ''}`} onClick={() => setActiveTab('asistencias')}>
           <Calendar size={16} /> Asistencias
@@ -517,178 +524,286 @@ export default function TorneoPublico() {
       </div>
 
       {/* Modal detalle equipo - Dashboard */}
-      <Modal open={!!selectedTeam} onClose={() => setSelectedEquipo(null)} title="" extraWide className="modal-dark">
+      <Modal open={!!selectedTeam} onClose={() => setSelectedEquipo(null)} title="" extraWide className={darkMode ? 'modal-dark' : ''}>
         {selectedTeam && (
           <div className="team-dashboard">
             {/* Header */}
-            <div className="td-header">
-              <img src={getFileUrl(selectedTeam.logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(selectedTeam.nombre) + '&background=3b82f6&color=fff&size=56'} alt="" className="td-header-logo" onClick={() => selectedTeam.logo && setViewPhoto({ url: getFileUrl(selectedTeam.logo)!, nombre: selectedTeam.nombre, equipo: selectedTeam.nombre, equipoLogo: getFileUrl(selectedTeam.logo) || undefined, categoria: torneo.categoria, tipo: 'equipo' })} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem' }}>
+              <img src={getFileUrl(selectedTeam.logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(selectedTeam.nombre) + '&background=3b82f6&color=fff&size=72'} alt="" style={{ width: 72, height: 72, borderRadius: '16px', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.1)', cursor: 'pointer' }} onClick={() => selectedTeam.logo && setViewPhoto({ url: getFileUrl(selectedTeam.logo)!, nombre: selectedTeam.nombre, equipo: selectedTeam.nombre, equipoLogo: getFileUrl(selectedTeam.logo) || undefined, categoria: torneo.categoria, tipo: 'equipo' })} />
               <div>
-                <h2 className="td-header-name">{selectedTeam.nombre}</h2>
-                <p className="td-header-meta">{torneo.categoria} · {torneo.periodo}</p>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 900, color: 'white', margin: 0, textTransform: 'uppercase' }}>{selectedTeam.nombre}</h2>
+                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0, marginTop: '0.2rem' }}>{torneo.categoria} · {torneo.periodo}</p>
+                {selectedTeam.estadisticas && (
+                  <span style={{ display: 'inline-block', marginTop: '0.4rem', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.65rem', fontWeight: 700 }}>
+                    {tabla_posiciones.findIndex(r => r.equipo_id === selectedTeam.id) + 1}° lugar
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* KPIs - solo si hay estadisticas */}
+            {/* KPIs */}
             {selectedTeam.estadisticas ? (
             <>
-            <div className="td-kpis">
-              <div className="td-kpi"><span className="td-kpi-icon">👥</span><span className="td-kpi-label">Jugadores</span><span className="td-kpi-value">{selectedTeam.estadisticas.total_jugadores}</span></div>
-              <div className="td-kpi"><span className="td-kpi-icon">📅</span><span className="td-kpi-label">Partidos jugados</span><span className="td-kpi-value">{selectedTeam.estadisticas.partidos_jugados}</span></div>
-              <div className="td-kpi td-kpi-success"><span className="td-kpi-icon">🏆</span><span className="td-kpi-label">Ganados</span><span className="td-kpi-value">{selectedTeam.estadisticas.partidos_ganados}</span></div>
-              <div className="td-kpi td-kpi-danger"><span className="td-kpi-icon">❌</span><span className="td-kpi-label">Perdidos</span><span className="td-kpi-value">{selectedTeam.estadisticas.partidos_perdidos}</span></div>
-              <div className="td-kpi"><span className="td-kpi-icon">⭐</span><span className="td-kpi-label">Puntos totales</span><span className="td-kpi-value">{selectedTeam.estadisticas.puntos_totales}</span></div>
-            </div>
-
-            {/* Últimos resultados */}
-            <div className="td-section">
-              <h4>Últimos partidos</h4>
-              <div className="td-results">
-                {selectedTeam.estadisticas.ultimos_resultados.map((r, i) => (
-                  <span key={i} className={`td-result-circle ${r === 'G' ? 'win' : 'loss'}`}>{r}</span>
-                ))}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.4rem', marginBottom: '1.25rem' }}>
+              <div style={{ background: 'rgba(59,130,246,0.1)', borderRadius: '12px', padding: '0.6rem 0.3rem', textAlign: 'center' }}>
+                <span style={{ fontSize: '1.2rem', display: 'block', marginBottom: '0.1rem' }}>👥</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', display: 'block' }}>{selectedTeam.estadisticas.total_jugadores}</span>
+                <span style={{ fontSize: '0.5rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Jugadores</span>
               </div>
-              {selectedTeam.estadisticas.racha_actual > 0 && (
-                <p className="td-racha">🔥 Racha actual: {selectedTeam.estadisticas.racha_actual} victorias</p>
-              )}
+              <div style={{ background: 'rgba(139,92,246,0.1)', borderRadius: '12px', padding: '0.6rem 0.3rem', textAlign: 'center' }}>
+                <span style={{ fontSize: '1.2rem', display: 'block', marginBottom: '0.1rem' }}>📅</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', display: 'block' }}>{selectedTeam.estadisticas.partidos_jugados}</span>
+                <span style={{ fontSize: '0.5rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Jugados</span>
+              </div>
+              <div style={{ background: 'rgba(16,185,129,0.1)', borderRadius: '12px', padding: '0.6rem 0.3rem', textAlign: 'center' }}>
+                <span style={{ fontSize: '1.2rem', display: 'block', marginBottom: '0.1rem' }}>🏆</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#10b981', display: 'block' }}>{selectedTeam.estadisticas.partidos_ganados}</span>
+                <span style={{ fontSize: '0.5rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Ganados</span>
+              </div>
+              <div style={{ background: 'rgba(239,68,68,0.1)', borderRadius: '12px', padding: '0.6rem 0.3rem', textAlign: 'center' }}>
+                <span style={{ fontSize: '1.2rem', display: 'block', marginBottom: '0.1rem' }}>❌</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#ef4444', display: 'block' }}>{selectedTeam.estadisticas.partidos_perdidos}</span>
+                <span style={{ fontSize: '0.5rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Perdidos</span>
+              </div>
+              <div style={{ background: 'rgba(245,158,11,0.1)', borderRadius: '12px', padding: '0.6rem 0.3rem', textAlign: 'center' }}>
+                <span style={{ fontSize: '1.2rem', display: 'block', marginBottom: '0.1rem' }}>⭐</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f59e0b', display: 'block' }}>{selectedTeam.estadisticas.puntos_totales}</span>
+                <span style={{ fontSize: '0.5rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Puntos</span>
+              </div>
             </div>
 
-            {/* Stats grid */}
-            <div className="td-stats-grid">
-              {/* Porcentaje de victorias - Donut */}
+            {/* Últimos Partidos - Cards scrolleables */}
+            {loadingResults ? (
+              <div className="td-section"><p style={{ color: '#94a3b8', fontSize: '0.75rem' }}>Cargando partidos...</p></div>
+            ) : teamResults.length > 0 && (
               <div className="td-section">
-                <h4>Porcentaje de victorias</h4>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', justifyContent: 'center' }}>
-                  <div style={{ position: 'relative', width: 100, height: 100 }}>
-                    <svg width="100" height="100" viewBox="0 0 100 100">
-                      <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="12" />
-                      <circle cx="50" cy="50" r="40" fill="none" stroke="url(#donutGrad)" strokeWidth="12" strokeLinecap="round"
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <h4 style={{ margin: 0 }}>Últimos Partidos</h4>
+                  <button onClick={() => setResultsViewMode(resultsViewMode === 'cards' ? 'list' : 'cards')} style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer' }}>
+                    {resultsViewMode === 'cards' ? 'Ver todos ›' : '‹ Cards'}
+                  </button>
+                </div>
+                {resultsViewMode === 'cards' ? (
+                <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+                  {teamResults.map(r => (
+                    <div key={r.partido_id} style={{ minWidth: 130, background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '0.6rem', border: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+                      <p style={{ fontSize: '0.55rem', color: '#94a3b8', margin: 0, textAlign: 'center', marginBottom: '0.4rem' }}>J{r.jornada_numero}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', marginBottom: '0.3rem' }}>
+                        <img src={getFileUrl(r.equipo_local_logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(r.equipo_local) + '&background=3b82f6&color=fff&size=20'} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
+                        <span style={{ fontSize: '0.55rem', color: '#64748b' }}>vs</span>
+                        <img src={getFileUrl(r.equipo_visitante_logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(r.equipo_visitante) + '&background=8b5cf6&color=fff&size=20'} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
+                      </div>
+                      <p style={{ fontSize: '1rem', fontWeight: 800, color: r.resultado === 'G' ? '#10b981' : '#ef4444', margin: 0, textAlign: 'center' }}>{r.puntos_local} - {r.puntos_visitante}</p>
+                      <p style={{ fontSize: '0.5rem', color: '#94a3b8', margin: 0, textAlign: 'center', marginTop: '0.2rem' }}>{r.equipo_local.length > 10 ? r.equipo_local.slice(0,10) + '..' : r.equipo_local} vs {r.equipo_visitante.length > 10 ? r.equipo_visitante.slice(0,10) + '..' : r.equipo_visitante}</p>
+                    </div>
+                  ))}
+                </div>
+                ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {teamResults.map(r => (
+                    <div key={r.partido_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.6rem', borderRadius: '8px', background: r.resultado === 'G' ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.06)', border: `1px solid ${r.resultado === 'G' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.12)'}` }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 32 }}>
+                        <span style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748b' }}>J{r.jornada_numero}</span>
+                        <span style={{ fontSize: '0.45rem', color: '#4b5563' }}>{r.fecha ? formatDate(r.fecha) : ''}</span>
+                      </div>
+                      <img src={getFileUrl(r.equipo_local_logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(r.equipo_local) + '&background=3b82f6&color=fff&size=18'} alt="" style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} />
+                      <span style={{ flex: 1, fontSize: '0.7rem', fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.equipo_local}</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'white', minWidth: 40, textAlign: 'center' }}>{r.puntos_local}-{r.puntos_visitante}</span>
+                      <span style={{ flex: 1, fontSize: '0.7rem', fontWeight: 600, color: '#e2e8f0', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.equipo_visitante}</span>
+                      <img src={getFileUrl(r.equipo_visitante_logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(r.equipo_visitante) + '&background=8b5cf6&color=fff&size=18'} alt="" style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} />
+                    </div>
+                  ))}
+                </div>
+                )}
+              </div>
+            )}
+
+            {/* Stats grid 2x2 compacto con expand */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1rem' }}>
+              {/* Porcentaje de victorias */}
+              <div style={{ background: 'linear-gradient(145deg, #111d33 0%, #0d1a2d 100%)', borderRadius: '16px', padding: '1rem', border: '1px solid rgba(16,185,129,0.12)', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: -15, right: -15, width: 60, height: 60, background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, transparent 70%)', borderRadius: '50%' }} />
+                <p style={{ fontSize: '0.55rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 0.6rem' }}>% Victorias</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
+                    <svg width="56" height="56" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="14" />
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="url(#donutGrad)" strokeWidth="14" strokeLinecap="round"
                         strokeDasharray={`${(selectedTeam.estadisticas.porcentaje_victorias / 100) * 251.2} 251.2`}
                         transform="rotate(-90 50 50)" />
-                      <defs><linearGradient id="donutGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#3b82f6" /></linearGradient></defs>
+                      <defs><linearGradient id="donutGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#06b6d4" /></linearGradient></defs>
                     </svg>
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white' }}>{selectedTeam.estadisticas.porcentaje_victorias.toFixed(1)}%</span>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'white' }}>{selectedTeam.estadisticas.porcentaje_victorias.toFixed(0)}%</span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }} />
-                      <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>Victorias {selectedTeam.estadisticas.partidos_ganados} ({selectedTeam.estadisticas.porcentaje_victorias.toFixed(1)}%)</span>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.2rem' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+                      <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>{selectedTeam.estadisticas.partidos_ganados}G</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }} />
-                      <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>Derrotas {selectedTeam.estadisticas.partidos_perdidos} ({(100 - selectedTeam.estadisticas.porcentaje_victorias).toFixed(1)}%)</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444' }} />
+                      <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>{selectedTeam.estadisticas.partidos_perdidos}P</span>
                     </div>
                   </div>
                 </div>
               </div>
 
+              {/* Promedio de puntos */}
+              <div style={{ background: 'linear-gradient(145deg, #111d33 0%, #0d1a2d 100%)', borderRadius: '16px', padding: '1rem', border: '1px solid rgba(59,130,246,0.12)', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: -15, right: -15, width: 60, height: 60, background: 'radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)', borderRadius: '50%' }} />
+                <p style={{ fontSize: '0.55rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 0.3rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Promedio <span onClick={(e) => { e.stopPropagation(); setInfoTooltip('Puntos promedio obtenidos por partido jugado. Se calcula dividiendo los puntos totales entre los partidos jugados.'); }} style={{ cursor: 'pointer', width: 14, height: 14, borderRadius: '50%', border: '1px solid rgba(148,163,184,0.3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', color: 'rgba(148,163,184,0.5)', fontStyle: 'italic', fontWeight: 400 }}>i</span></p>
+                <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'white', display: 'block', lineHeight: 1 }}>{selectedTeam.estadisticas.promedio_puntos_partido.toFixed(2)}</span>
+                <span style={{ fontSize: '0.55rem', color: '#64748b' }}>pts/partido</span>
+                {selectedTeam.estadisticas.puntos_acumulados?.length > 1 && (
+                  <svg width="100%" height="28" viewBox={`0 0 ${(selectedTeam.estadisticas.puntos_acumulados.length - 1) * 18 + 18} 28`} style={{ marginTop: '0.4rem', display: 'block' }}>
+                    {(() => {
+                      const pts = selectedTeam.estadisticas.puntos_acumulados;
+                      const maxPts = Math.max(...pts, 1);
+                      const points = pts.map((p, i) => ({ x: i * 18 + 9, y: 24 - (p / maxPts) * 20 }));
+                      const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+                      const areaD = pathD + ` L${points[points.length - 1].x},26 L${points[0].x},26 Z`;
+                      return (<><path d={areaD} fill="url(#areaG)" opacity="0.25" /><path d={pathD} fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" /><defs><linearGradient id="areaG" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor="#3b82f6" /><stop offset="100%" stopColor="transparent" /></linearGradient></defs></>);
+                    })()}
+                  </svg>
+                )}
+              </div>
+
+              {/* Efectividad - Heatmap */}
+              {selectedTeam.estadisticas.puntos_acumulados?.length > 1 && (
+              <div style={{ background: 'linear-gradient(145deg, #111d33 0%, #0d1a2d 100%)', borderRadius: '16px', padding: '1rem', border: '1px solid rgba(16,185,129,0.08)', position: 'relative', overflow: 'hidden' }}>
+                <p style={{ fontSize: '0.55rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Efectividad por partido <span onClick={(e) => { e.stopPropagation(); setInfoTooltip('Muestra los puntos obtenidos en cada partido. Colores: rojo oscuro (0 pts), rojo (1 pt), amarillo (2 pts), verde (3 pts).'); }} style={{ cursor: 'pointer', width: 14, height: 14, borderRadius: '50%', border: '1px solid rgba(148,163,184,0.3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', color: 'rgba(148,163,184,0.5)', fontStyle: 'italic', fontWeight: 400 }}>i</span></p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                  {(() => {
+                    const pts = selectedTeam.estadisticas.puntos_acumulados;
+                    const perGame = pts.map((p, i) => i === 0 ? p : p - pts[i - 1]);
+                    const colors = ['#7f1d1d', '#dc2626', '#f59e0b', '#10b981'];
+                    return perGame.map((p, i) => (
+                      <div key={i} style={{ width: 18, height: 18, borderRadius: 4, background: colors[Math.min(p, 3)], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontSize: '0.5rem', fontWeight: 700, color: 'white', opacity: 0.9 }}>{p}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.45rem', color: '#64748b' }}>Bajo</span>
+                  <div style={{ display: 'flex', gap: '2px' }}>
+                    {['#7f1d1d', '#dc2626', '#f59e0b', '#10b981'].map((c, i) => (
+                      <div key={i} style={{ width: 10, height: 10, borderRadius: 2, background: c }} />
+                    ))}
+                  </div>
+                  <span style={{ fontSize: '0.45rem', color: '#64748b' }}>Alto</span>
+                </div>
+              </div>
+              )}
+
+              {/* Posición en el torneo */}
+              <div style={{ background: 'linear-gradient(145deg, #111d33 0%, #0d1a2d 100%)', borderRadius: '16px', padding: '1rem', border: '1px solid rgba(245,158,11,0.08)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <p style={{ fontSize: '0.55rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 0.5rem', alignSelf: 'flex-start' }}>Posición</p>
+                {(() => {
+                  const pos = tabla_posiciones.findIndex(r => r.equipo_id === selectedTeam.id) + 1;
+                  const total = tabla_posiciones.length;
+                  const pct = ((total - pos) / (total - 1)) * 100;
+                  const color = '#3b82f6';
+                  return (
+                    <>
+                      <div style={{ position: 'relative', width: '100%', height: 12, background: 'rgba(255,255,255,0.05)', borderRadius: 6, overflow: 'visible', marginBottom: '0.5rem' }}>
+                        <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: `linear-gradient(90deg, ${color}, ${color}88)`, borderRadius: 6 }} />
+                        <div style={{ position: 'absolute', top: -4, left: `${pct}%`, transform: 'translateX(-50%)', width: 20, height: 20, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #0d1a2d' }}>
+                          <span style={{ fontSize: '0.55rem', fontWeight: 800, color: 'white' }}>{pos}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                        <span style={{ fontSize: '0.45rem', color: '#64748b' }}>#{total}</span>
+                        <span style={{ fontSize: '0.55rem', fontWeight: 700, color }}>#{pos} de {total}</span>
+                        <span style={{ fontSize: '0.45rem', color: '#64748b' }}>#1</span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Racha histórica */}
+              {selectedTeam.estadisticas.ultimos_resultados?.length > 1 && (
+              <div style={{ background: 'linear-gradient(145deg, #111d33 0%, #0d1a2d 100%)', borderRadius: '16px', padding: '1rem', border: '1px solid rgba(245,158,11,0.08)' }}>
+                <p style={{ fontSize: '0.55rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>Rachas <span onClick={(e) => { e.stopPropagation(); setInfoTooltip('Rachas consecutivas de victorias (verde) y derrotas (rojo). El ancho y alto de cada bloque indica cuántos partidos duró la racha.'); }} style={{ cursor: 'pointer', width: 14, height: 14, borderRadius: '50%', border: '1px solid rgba(148,163,184,0.3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', color: 'rgba(148,163,184,0.5)', fontStyle: 'italic', fontWeight: 400 }}>i</span></p>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1px', height: 35 }}>
+                  {(() => {
+                    const results = selectedTeam.estadisticas.ultimos_resultados;
+                    const rachas: { tipo: string; len: number }[] = [];
+                    let current = results[0]; let count = 1;
+                    for (let i = 1; i < results.length; i++) {
+                      if (results[i] === current) { count++; } else { rachas.push({ tipo: current, len: count }); current = results[i]; count = 1; }
+                    }
+                    rachas.push({ tipo: current, len: count });
+                    const maxLen = Math.max(...rachas.map(r => r.len), 1);
+                    return rachas.map((r, i) => (
+                      <div key={i} style={{ flex: r.len, height: `${(r.len / maxLen) * 100}%`, minHeight: 6, background: r.tipo === 'G' ? '#10b981' : '#ef4444', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontSize: '0.5rem', fontWeight: 700, color: 'white' }}>{r.len}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem', justifyContent: 'center' }}>
+                  <span style={{ fontSize: '0.5rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.2rem' }}><span style={{ width: 6, height: 6, background: '#10b981', borderRadius: 2 }} />Victorias</span>
+                  <span style={{ fontSize: '0.5rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.2rem' }}><span style={{ width: 6, height: 6, background: '#ef4444', borderRadius: 2 }} />Derrotas</span>
+                </div>
+              </div>
+              )}
+
               {/* Distribución por posición */}
-              <div className="td-section">
-                <h4>Distribución por posición</h4>
-                <div className="td-positions">
+              <div style={{ background: 'linear-gradient(145deg, #111d33 0%, #0d1a2d 100%)', borderRadius: '16px', padding: '1rem', border: '1px solid rgba(59,130,246,0.08)' }}>
+                <p style={{ fontSize: '0.55rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 0.5rem' }}>Posiciones</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                   {Object.entries(selectedTeam.estadisticas.distribucion_posiciones).map(([pos, count]) => (
-                    <div key={pos} className="td-pos-row">
-                      <span className="td-pos-name">{pos}</span>
-                      <div className="td-pos-bar"><div style={{ width: `${(count / selectedTeam.estadisticas!.total_jugadores) * 100}%` }} /></div>
-                      <span className="td-pos-count">{count}</span>
+                    <div key={pos} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <span style={{ fontSize: '0.55rem', color: '#94a3b8', width: 55, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pos}</span>
+                      <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${(count / selectedTeam.estadisticas!.total_jugadores) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #3b82f6, #06b6d4)', borderRadius: 3 }} />
+                      </div>
+                      <span style={{ fontSize: '0.6rem', fontWeight: 700, color: 'white', width: 16 }}>{count}</span>
                     </div>
                   ))}
                 </div>
               </div>
-
-              {/* Promedio */}
-              <div className="td-section">
-                <h4>Promedio</h4>
-                <div className="td-promedio">
-                  <span className="td-promedio-value">{selectedTeam.estadisticas.promedio_puntos_partido.toFixed(2)}</span>
-                  <span className="td-promedio-label">pts/partido</span>
-                </div>
-              </div>
             </div>
 
-            {/* Sparkline de tendencia */}
-            {selectedTeam.estadisticas.ultimos_resultados?.length > 1 && (
-              <div className="td-section">
-                <h4>Tendencia</h4>
-                <svg width="100%" height="70" viewBox={`0 0 ${(selectedTeam.estadisticas.ultimos_resultados.length - 1) * 30 + 30} 70`} style={{ overflow: 'visible' }}>
-                  {(() => {
-                    const results = selectedTeam.estadisticas.ultimos_resultados;
-                    const chartW = (results.length - 1) * 30 + 30;
-                    let acc = 0;
-                    const points = results.map((r, i) => {
-                      acc += r === 'G' ? 1 : -1;
-                      return { x: i * 30 + 20, y: acc };
-                    });
-                    const maxY = Math.max(...points.map(p => Math.abs(p.y)), 1);
-                    const normalized = points.map(p => ({ x: p.x, y: 35 - (p.y / maxY) * 25 }));
-                    const pathD = normalized.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-                    return (
-                      <>
-                        {/* Eje Y */}
-                        <line x1="18" y1="8" x2="18" y2="62" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-                        <text x="14" y="13" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">+</text>
-                        <text x="14" y="64" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">−</text>
-                        {/* Eje X */}
-                        <line x1="18" y1="62" x2={chartW} y2="62" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-                        {normalized.filter((_, i) => i % 2 === 0).map((p, i) => (
-                          <text key={i} x={p.x} y="69" textAnchor="middle" fontSize="6" fill="rgba(255,255,255,0.3)">{i * 2 + 1}</text>
-                        ))}
-                        {/* Línea base */}
-                        <line x1="18" y1="35" x2={chartW} y2="35" stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeDasharray="4" />
-                        <path d={pathD} fill="none" stroke="url(#sparkGradPub)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                        {normalized.map((p, i) => (
-                          <circle key={i} cx={p.x} cy={p.y} r="3" fill={results[i] === 'G' ? '#10b981' : '#ef4444'} />
-                        ))}
-                        <defs><linearGradient id="sparkGradPub" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#3b82f6" /></linearGradient></defs>
-                      </>
-                    );
-                  })()}
-                </svg>
+            {/* Ranking del torneo */}
+            <div className="td-section">
+              <h4>Ranking del torneo</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                {tabla_posiciones.slice(0, 5).map((row, i) => {
+                  const eq = equipos.find(e => e.id === row.equipo_id);
+                  const isMe = row.equipo_id === selectedTeam.id;
+                  return (
+                    <div key={row.equipo_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.45rem 0.6rem', borderRadius: '8px', background: isMe ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.03)', border: isMe ? '1px solid rgba(59,130,246,0.3)' : '1px solid transparent' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: i < 3 ? '#f59e0b' : '#64748b', width: 18 }}>{i + 1}</span>
+                      <img src={getFileUrl(eq?.logo || '') || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(row.equipo_nombre) + '&background=3b82f6&color=fff&size=20'} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
+                      <span style={{ flex: 1, fontSize: '0.75rem', fontWeight: isMe ? 800 : 500, color: isMe ? 'white' : '#cbd5e1' }}>{row.equipo_nombre}</span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isMe ? '#3b82f6' : '#94a3b8' }}>{row.pts} pts</span>
+                    </div>
+                  );
+                })}
+                {/* Si el equipo no está en top 5, mostrarlo con separador */}
+                {tabla_posiciones.findIndex(r => r.equipo_id === selectedTeam.id) >= 5 && (() => {
+                  const idx = tabla_posiciones.findIndex(r => r.equipo_id === selectedTeam.id);
+                  const row = tabla_posiciones[idx];
+                  const eq = equipos.find(e => e.id === row.equipo_id);
+                  return (
+                    <>
+                      <div style={{ textAlign: 'center', padding: '0.2rem 0', color: '#64748b', fontSize: '0.7rem', letterSpacing: '2px' }}>•••</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.45rem 0.6rem', borderRadius: '8px', background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b', width: 18 }}>{idx + 1}</span>
+                        <img src={getFileUrl(eq?.logo || '') || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(row.equipo_nombre) + '&background=3b82f6&color=fff&size=20'} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
+                        <span style={{ flex: 1, fontSize: '0.75rem', fontWeight: 800, color: 'white' }}>{row.equipo_nombre}</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#3b82f6' }}>{row.pts} pts</span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
-            )}
-
-            {/* Puntos acumulados */}
-            {selectedTeam.estadisticas.puntos_acumulados?.length > 1 && (
-              <div className="td-section">
-                <h4>Evolución de puntos</h4>
-                <svg width="100%" height="90" viewBox={`0 0 ${(selectedTeam.estadisticas.puntos_acumulados.length - 1) * 30 + 30} 90`} style={{ overflow: 'visible' }}>
-                  {(() => {
-                    const pts: number[] = selectedTeam.estadisticas.puntos_acumulados;
-                    const maxPts = Math.max(...pts, 1);
-                    const chartW = (pts.length - 1) * 30 + 30;
-                    const points = pts.map((p, i) => ({ x: i * 30 + 20, y: 72 - (p / maxPts) * 58 }));
-                    const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-                    const areaD = pathD + ` L${points[points.length - 1].x},72 L${points[0].x},72 Z`;
-                    return (
-                      <>
-                        {/* Eje Y */}
-                        <line x1="18" y1="10" x2="18" y2="72" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-                        <text x="14" y="16" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">{maxPts}</text>
-                        <text x="14" y="74" textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.35)">0</text>
-                        {/* Eje X */}
-                        <line x1="18" y1="72" x2={chartW} y2="72" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-                        {points.filter((_, i) => i % 2 === 0).map((p, i) => (
-                          <text key={i} x={p.x} y="82" textAnchor="middle" fontSize="7" fill="rgba(255,255,255,0.3)">J{i * 2 + 1}</text>
-                        ))}
-                        {/* Grid line */}
-                        <line x1="18" y1="40" x2={chartW} y2="40" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="3" />
-                        <path d={areaD} fill="url(#areaGradPub)" opacity="0.3" />
-                        <path d={pathD} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                        {points.map((p, i) => (
-                          <g key={i}>
-                            <circle cx={p.x} cy={p.y} r="3" fill="#3b82f6" />
-                            {i === points.length - 1 && <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="9" fill="white" fontWeight="700">{pts[i]}</text>}
-                          </g>
-                        ))}
-                        <defs><linearGradient id="areaGradPub" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor="#3b82f6" /><stop offset="100%" stopColor="transparent" /></linearGradient></defs>
-                      </>
-                    );
-                  })()}
-                </svg>
-              </div>
-            )}
+            </div>
 
             {/* Plantilla */}
             <div className="td-section">
@@ -721,53 +836,12 @@ export default function TorneoPublico() {
                 <p style={{ color: '#94a3b8', textAlign: 'center', padding: '1rem 0' }}>Este equipo tiene su perfil privado</p>
               </div>
             )}
-
-            {/* Resultados de partidos */}
-            <div className="td-section">
-              <h4>Resultados ({teamResults.length})</h4>
-              {loadingResults ? (
-                <p style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Cargando resultados...</p>
-              ) : teamResults.length === 0 ? (
-                <p style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Sin partidos jugados aún.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                  {teamResults.map(r => (
-                    <div key={r.partido_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.6rem', borderRadius: '8px', background: r.resultado === 'G' ? 'rgba(16,185,129,0.1)' : r.resultado === 'P' ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${r.resultado === 'G' ? 'rgba(16,185,129,0.2)' : r.resultado === 'P' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)'}` }}>
-                      <span style={{ fontSize: '0.6rem', color: '#64748b', minWidth: 22 }}>J{r.jornada_numero}</span>
-                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <img src={getFileUrl(r.equipo_local_logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(r.equipo_local) + '&background=3b82f6&color=fff&size=18'} alt="" style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover' }} />
-                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#e2e8f0' }}>{r.equipo_local}</span>
-                      </div>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'white', minWidth: 40, textAlign: 'center' }}>{r.puntos_local} - {r.puntos_visitante}</span>
-                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-end' }}>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#e2e8f0' }}>{r.equipo_visitante}</span>
-                        <img src={getFileUrl(r.equipo_visitante_logo) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(r.equipo_visitante) + '&background=8b5cf6&color=fff&size=18'} alt="" style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover' }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Ranking */}
-            <div className="td-section">
-              <h4>Ranking del torneo</h4>
-              <div className="td-ranking">
-                {tabla_posiciones.map((row, i) => (
-                  <div key={row.equipo_id} className={`td-ranking-row ${row.equipo_id === selectedTeam.id ? 'highlight' : ''}`}>
-                    <span className="td-ranking-pos">{i + 1}</span>
-                    <span className="td-ranking-name">{row.equipo_nombre}</span>
-                    <span className="td-ranking-pts">{row.pts} pts</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
       </Modal>
 
       {/* View Photo Modal - Player Card */}
-      <Modal open={!!viewPhoto} onClose={() => { setViewPhoto(null); setExpandedPhoto(false); }} title="" className="modal-dark modal-player-card">
+      <Modal open={!!viewPhoto} onClose={() => { setViewPhoto(null); setExpandedPhoto(false); }} title="" className={`${darkMode ? 'modal-dark' : ''} modal-player-card`}>
         {viewPhoto && (
           <div className="player-card">
             {expandedPhoto && (
@@ -864,6 +938,16 @@ export default function TorneoPublico() {
           </div>
         )}
       </Modal>
+
+      {/* Info Tooltip */}
+      {infoTooltip && (
+        <div onClick={() => setInfoTooltip(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#111d33', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.25rem', maxWidth: 280, color: '#e2e8f0', fontSize: '0.8rem', lineHeight: 1.5, textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
+            <p style={{ margin: '0 0 1rem' }}>{infoTooltip}</p>
+            <button onClick={() => setInfoTooltip(null)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', padding: '0.4rem 1.25rem', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>Entendido</button>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="public-footer">
